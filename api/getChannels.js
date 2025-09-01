@@ -1,12 +1,10 @@
-// Kód pro tento soubor je stejný jako v mé předchozí odpovědi.
-// Zůstává zde pro kompletnost.
 const { Xtream } = require('@iptv/xtream-api');
 const { standardizedSerializer } = require('@iptv/xtream-api/standardized');
 const axios = require('axios');
 const globalTunnel = require('global-tunnel-ng');
 const url = require('url');
 
-// --- KONFIGURACE ---
+// --- KONFIGURACE A PROXY LOGIKA (zůstává stejná) ---
 const AMZ_API_BASE_URL = 'https://amz.odjezdy.online/iptv/api';
 const AMZ_API_KEY = process.env.AMZ_API_KEY;
 const MAX_RETRIES = 5;
@@ -18,7 +16,7 @@ let proxyCache = [];
 let lastProxyFetch = 0;
 const PROXY_CACHE_DURATION = 30 * 60 * 1000;
 
-// --- HLAVNÍ FUNKCE ---
+// --- HLAVNÍ FUNKCE (beze změny) ---
 module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -56,32 +54,63 @@ module.exports = async (req, res) => {
 };
 
 // --- POMOCNÉ FUNKCE ---
+
+// ZÁSADNĚ PŘEPRACOVANÁ FUNKCE
 async function getChannelsWithRetry(provider) {
+    const { server, username, password } = provider;
+    
+    // Zkusíme se 5x připojit s různými proxy
     for (let i = 0; i < MAX_RETRIES; i++) {
         const proxy = proxyCache.length > 0 ? proxyCache[Math.floor(Math.random() * proxyCache.length)] : null;
         if (proxy) {
             globalTunnel.initialize({ protocol: proxy.type === 'http' ? 'http:' : 'socks:', host: proxy.host, port: proxy.port });
         }
+
         try {
-            const xtream = new Xtream({ url: provider.server, username: provider.username, password: provider.password, serializer: standardizedSerializer });
+            // Krok 1: Získáme kategorie pomocí knihovny (je spolehlivá)
+            const xtream = new Xtream({ url: server, username, password, serializer: standardizedSerializer });
             const categories = await xtream.getChannelCategories();
             const categoryMap = new Map(categories.map(c => [c.id, c.name]));
-            const channels = await xtream.getChannels();
+            
+            // Krok 2: Získáme kanály pomocí robustnějšího `axios`
+            const apiUrl = `${server}/player_api.php?username=${username}&password=${password}&action=get_live_streams`;
+            const response = await axios.get(apiUrl, { timeout: 15000 });
+
+            if (!Array.isArray(response.data)) {
+                // Pokud odpověď není pole, server vrátil něco špatně
+                throw new Error('Invalid response from server, not an array.');
+            }
+            
+            // Mapování dat je teď potřeba udělat ručně, protože nepoužíváme serializer na kanály
+            const channels = response.data.map(channel => ({
+                id: channel.stream_id.toString(),
+                name: channel.name,
+                logo: channel.stream_icon,
+                categoryIds: [channel.category_id.toString()],
+                url: `${server}/live/${username}/${password}/${channel.stream_id}.ts` // Standardní formát URL
+            }));
+            
             const channelsWithCategories = channels.map(channel => ({
                 ...channel,
                 category_name: categoryMap.get(channel.categoryIds[0]) || 'Uncategorized',
-                provider: { server: provider.server, username: provider.username, password: provider.password, hostname: new url.URL(provider.server).hostname }
+                provider: { server, username, password, hostname: new url.URL(server).hostname }
             }));
+
             if (proxy) globalTunnel.end();
             return channelsWithCategories;
+
         } catch (error) {
-            console.warn(`Attempt ${i + 1}/${MAX_RETRIES} for ${provider.server} failed. Error: ${error.message}`);
+            console.warn(`Attempt ${i + 1}/${MAX_RETRIES} for ${server} failed. Error: ${error.message}`);
             if (proxy) globalTunnel.end();
         }
     }
-    console.error(`Failed to fetch from ${provider.server} after ${MAX_RETRIES} attempts.`);
+    
+    console.error(`Failed to fetch from ${server} after ${MAX_RETRIES} attempts.`);
     return [];
 }
+
+
+// --- Zbytek souboru zůstává stejný ---
 function processAndMergeChannels(channels) {
     const channelMap = new Map();
     channels.forEach(channel => {
