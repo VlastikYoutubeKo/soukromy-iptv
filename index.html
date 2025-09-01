@@ -652,19 +652,30 @@
                     }
                     
                     const responseData = await response.json();
+                    console.log('Response received:', responseData);
                     
-                    // Handle new response format
-                    allChannelsData = responseData.channels || responseData;
-                    const errors = responseData.errors || [];
+                    // Handle new response format - metadata are now in _metadata
+                    const metadata = responseData._metadata || {};
+                    delete responseData._metadata; // Remove metadata from channel data
                     
-                    // Show any errors to user
+                    allChannelsData = responseData;
+                    const errors = metadata.errors || [];
+                    
+                    // Show any errors to user (but don't fail completely)
                     if (errors.length > 0) {
                         console.warn('Provider errors:', errors);
+                        // You could show a toast notification here if you want
                     }
+                    
+                    console.log(`Loaded ${metadata.totalChannels || 'unknown'} channels in ${metadata.categoriesCount || Object.keys(allChannelsData).length} categories`);
                     
                     // Extract unique providers
                     const providerMap = new Map();
                     Object.values(allChannelsData).flat().forEach(channel => {
+                        if (!channel.sources) {
+                            console.warn('Channel missing sources:', channel);
+                            return;
+                        }
                         channel.sources.forEach(source => {
                             const key = source.provider.server;
                             if (!providerMap.has(key)) {
@@ -684,13 +695,26 @@
                     
                 } catch (error) {
                     console.error('Error loading providers:', error);
+                    
+                    // Show more user-friendly error message
+                    let errorMessage = 'Neznámá chyba serveru';
+                    if (error.message.includes('Failed to fetch')) {
+                        errorMessage = 'Nepodařilo se připojit k serveru';
+                    } else if (error.message) {
+                        errorMessage = error.message;
+                    }
+                    
                     providerGrid.innerHTML = `
                         <div class="empty-state">
                             <div class="empty-state-icon">❌</div>
                             <h3>Chyba při načítání</h3>
-                            <p>${error.message}</p>
+                            <p>${errorMessage}</p>
+                            <p style="font-size: 0.9em; color: #888; margin-top: 10px;">
+                                Zkontrolujte konzoli pro více detailů.
+                            </p>
                         </div>
                     `;
+                    providerSelection.classList.add('visible'); // Show the section even with error
                 } finally {
                     loader.style.display = 'none';
                 }
