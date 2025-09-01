@@ -37,14 +37,19 @@ module.exports = async (req, res) => {
                 allChannels.push(...channels);
             }
         }
+        
         for (const manualUrl of manual_urls) {
             if (!manualUrl.trim()) continue;
             try {
                 const provider = parseXtreamUrl(manualUrl);
+                console.log('Parsed provider:', provider); // Debug log
                 const channels = await getChannelsWithRetry(provider);
                 allChannels.push(...channels);
-            } catch (error) { console.warn(`Failed to process manual URL: ${error.message}`); }
+            } catch (error) { 
+                console.warn(`Failed to process manual URL ${manualUrl}: ${error.message}`); 
+            }
         }
+        
         const processedData = processAndMergeChannels(allChannels);
         res.status(200).json(processedData);
     } catch (error) {
@@ -55,7 +60,6 @@ module.exports = async (req, res) => {
 
 // --- POMOCNÉ FUNKCE ---
 
-// Zůstává stejná jako v minulé opravě
 async function getChannelsWithRetry(provider) {
     const { server, username, password } = provider;
     
@@ -70,11 +74,14 @@ async function getChannelsWithRetry(provider) {
             const categoryMap = new Map(categories.map(c => [c.id, c.name]));
             
             const apiUrl = `${server}/player_api.php?username=${username}&password=${password}&action=get_live_streams`;
+            console.log('Fetching from:', apiUrl); // Debug log
             const response = await axios.get(apiUrl, { timeout: 15000 });
 
             if (!Array.isArray(response.data)) {
                 throw new Error('Invalid response from server, not an array.');
             }
+            
+            console.log(`Found ${response.data.length} channels from ${server}`); // Debug log
             
             const channels = response.data.map(channel => ({
                 id: channel.stream_id.toString(),
@@ -103,18 +110,15 @@ async function getChannelsWithRetry(provider) {
     return [];
 }
 
-// ZMĚNA JE POUZE ZDE
 async function getSubscriptionsFromAmz() {
     try {
         const headers = {
             'X-API-Key': AMZ_API_KEY,
-            // Přidáme hlavičku, aby se náš skript tvářil jako prohlížeč
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
         };
         const response = await axios.get(`${AMZ_API_BASE_URL}/subscriptions`, { headers });
         const fullSubscriptions = [];
         for (const sub of response.data) {
-            // Hlavičku použijeme i pro detailní dotaz
             const detailResponse = await axios.get(`${AMZ_API_BASE_URL}/subscription/${sub.hash}`, { headers });
             const { server, username, password } = detailResponse.data;
             if (server && username && password) {
@@ -123,7 +127,6 @@ async function getSubscriptionsFromAmz() {
         }
         return fullSubscriptions;
     } catch (error) {
-        // Přidáme detailnější logování chyby
         console.error("Error fetching from AMZ API:", error.message);
         if (error.response) {
             console.error("AMZ API Response Data:", error.response.data);
@@ -132,8 +135,6 @@ async function getSubscriptionsFromAmz() {
     }
 }
 
-
-// --- Zbytek souboru zůstává stejný ---
 function processAndMergeChannels(channels) {
     const channelMap = new Map();
     channels.forEach(channel => {
@@ -158,6 +159,55 @@ function processAndMergeChannels(channels) {
     });
     return finalStructure;
 }
-async function updateProxyCacheIfNeeded() { if (Date.now() - lastProxyFetch < PROXY_CACHE_DURATION && proxyCache.length > 0) return; try { const httpResponse = await axios.get(PROXY_URLS.http, { timeout: 5000 }); const socks5Response = await axios.get(PROXY_URLS.socks5, { timeout: 5000 }); const httpProxies = httpResponse.data.split('\n').filter(Boolean).map(p => ({ type: 'http', host: p.split(':')[0], port: p.split(':')[1] })); const socks5Proxies = socks5Response.data.split('\n').filter(Boolean).map(p => ({ type: 'socks5', host: p.split(':')[0], port: p.split(':')[1] })); proxyCache = [...httpProxies, ...socks5Proxies]; lastProxyFetch = Date.now(); } catch (error) { console.error("Failed to fetch proxy lists:", error.message); } }
-function parseXtreamUrl(inputUrl) { const parsed = new url.URL(inputUrl); const server = `${parsed.protocol}//${parsed.host}`; const username = parsed.searchParams.get('username'); const password = parsed.searchParams.get('password'); if (!server || !username || password === null) throw new Error('Invalid URL'); return { server, username, password }; }
-function normalizeName(name) { return name.toLowerCase().replace(/\s*\(.*?\)\s*/g, '').replace(/\s*\[.*?\]\s*/g, '').replace(/hd|fhd|uhd|4k|8k|sd/g, '').replace(/[\s\-_|]+/g, '').trim(); }
+
+async function updateProxyCacheIfNeeded() { 
+    if (Date.now() - lastProxyFetch < PROXY_CACHE_DURATION && proxyCache.length > 0) return; 
+    try { 
+        const httpResponse = await axios.get(PROXY_URLS.http, { timeout: 5000 }); 
+        const socks5Response = await axios.get(PROXY_URLS.socks5, { timeout: 5000 }); 
+        const httpProxies = httpResponse.data.split('\n').filter(Boolean).map(p => ({ type: 'http', host: p.split(':')[0], port: p.split(':')[1] })); 
+        const socks5Proxies = socks5Response.data.split('\n').filter(Boolean).map(p => ({ type: 'socks5', host: p.split(':')[0], port: p.split(':')[1] })); 
+        proxyCache = [...httpProxies, ...socks5Proxies]; 
+        lastProxyFetch = Date.now(); 
+    } catch (error) { 
+        console.error("Failed to fetch proxy lists:", error.message); 
+    } 
+}
+
+// OPRAVENÁ FUNKCE PRO PARSING M3U_PLUS ODKAZŮ
+function parseXtreamUrl(inputUrl) { 
+    try {
+        const parsed = new url.URL(inputUrl);
+        
+        // Pokud je to M3U_PLUS odkaz (obsahuje get.php)
+        if (parsed.pathname.includes('get.php')) {
+            const server = `${parsed.protocol}//${parsed.host}`;
+            const username = parsed.searchParams.get('username');
+            const password = parsed.searchParams.get('password');
+            
+            if (!server || !username || !password) {
+                throw new Error(`Missing required parameters in M3U_PLUS URL: ${inputUrl}`);
+            }
+            
+            console.log(`Parsed M3U_PLUS URL - Server: ${server}, Username: ${username}`);
+            return { server, username, password };
+        }
+        
+        // Původní logika pro běžné Xtream odkazy
+        const server = `${parsed.protocol}//${parsed.host}`;
+        const username = parsed.searchParams.get('username');
+        const password = parsed.searchParams.get('password');
+        
+        if (!server || !username || password === null) {
+            throw new Error(`Invalid Xtream URL format: ${inputUrl}`);
+        }
+        
+        return { server, username, password };
+    } catch (error) {
+        throw new Error(`Failed to parse URL "${inputUrl}": ${error.message}`);
+    }
+}
+
+function normalizeName(name) { 
+    return name.toLowerCase().replace(/\s*\(.*?\)\s*/g, '').replace(/\s*\[.*?\]\s*/g, '').replace(/hd|fhd|uhd|4k|8k|sd/g, '').replace(/[\s\-_|]+/g, '').trim(); 
+}
