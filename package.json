@@ -1,0 +1,10 @@
+{
+  "name": "iptv-portal-pro",
+  "version": "2.0.0",
+  "description": "Advanced IPTV Channel Portal using @iptv/xtream-api",
+  "dependencies": {
+    "@iptv/xtream-api": "^1.2.0",
+    "axios": "^1.7.2",
+    "global-tunnel-ng": "^2.7.1"
+  }
+}
