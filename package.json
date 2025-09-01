@@ -6,5 +6,8 @@
     "@iptv/xtream-api": "^1.2.0",
     "axios": "^1.7.2",
     "global-tunnel-ng": "^2.7.1"
+  },
+  "overrides": {
+    "camelcase-keys": "7.0.0"
   }
 }
