@@ -1,11 +1,9 @@
-const axios = require('axios');
 const url = require('url');
+const { Xtream } = require('@iptv/xtream-api');
 
 // --- KONFIGURACE ---
 const AMZ_API_BASE_URL = 'https://amz.odjezdy.online/iptv/api';
 const AMZ_API_KEY = process.env.AMZ_API_KEY;
-const MAX_RETRIES = 3;
-const REQUEST_TIMEOUT = 15000;
 
 // --- HLAVNÍ FUNKCE ---
 module.exports = async (req, res) => {
@@ -21,50 +19,48 @@ module.exports = async (req, res) => {
         let allChannels = [];
         let providerErrors = [];
 
-        // Načteme AMZ API zdroje (pouze pokud není rate limit)
+        // Načteme AMZ API zdroje, pokud je k dispozici klíč
         if (AMZ_API_KEY) {
             try {
                 const subscriptions = await getSubscriptionsFromAmz();
                 console.log(`Found ${subscriptions.length} AMZ subscriptions`);
-                
-                for (const sub of subscriptions) {
-                    try {
-                        const channels = await getChannelsWithRetry(sub, true);
-                        allChannels.push(...channels);
-                        console.log(`Successfully loaded ${channels.length} channels from AMZ: ${sub.server}`);
-                    } catch (error) {
+                const amzPromises = subscriptions.map(sub => 
+                    getChannelsFromProvider(sub, true).catch(error => {
                         providerErrors.push({ provider: sub.server, error: error.message, source: 'AMZ API' });
-                        console.warn(`Failed to load channels from AMZ provider ${sub.server}: ${error.message}`);
-                    }
-                }
+                        return []; // V případě chyby vrátíme prázdné pole
+                    })
+                );
+                const amzResults = await Promise.all(amzPromises);
+                allChannels.push(...amzResults.flat());
             } catch (error) {
                 console.warn(`AMZ API error: ${error.message}`);
-                if (!error.message.includes('Rate limit')) {
-                    providerErrors.push({ provider: 'AMZ API', error: error.message, source: 'AMZ API' });
-                }
+                providerErrors.push({ provider: 'AMZ API', error: error.message, source: 'AMZ API' });
             }
         }
 
         // Načteme manuální URLs
-        for (const manualUrl of manual_urls) {
-            if (!manualUrl.trim()) continue;
-            try {
-                const provider = parseXtreamUrl(manualUrl);
-                console.log(`Processing manual URL: ${provider.server}`);
-                const channels = await getChannelsWithRetry(provider, false);
-                allChannels.push(...channels);
-                console.log(`Successfully loaded ${channels.length} channels from manual: ${provider.server}`);
-            } catch (error) {
-                providerErrors.push({ provider: manualUrl, error: error.message, source: 'Manual' });
-                console.warn(`Failed to process manual URL ${manualUrl}: ${error.message}`);
-            }
+        if (manual_urls.length > 0) {
+            const manualPromises = manual_urls.map(manualUrl => {
+                if (!manualUrl.trim()) return [];
+                try {
+                    const provider = parseXtreamUrl(manualUrl);
+                    return getChannelsFromProvider(provider, false).catch(error => {
+                        providerErrors.push({ provider: manualUrl, error: error.message, source: 'Manual' });
+                        return [];
+                    });
+                } catch (error) {
+                    providerErrors.push({ provider: manualUrl, error: error.message, source: 'Manual' });
+                    return [];
+                }
+            });
+            const manualResults = await Promise.all(manualPromises);
+            allChannels.push(...manualResults.flat());
         }
 
         const processedData = processAndMergeChannels(allChannels);
         
-        // Přidáme informace o chybách do odpovědi (pro debug)
         const response = {
-            ...processedData, // Spread the categories directly
+            ...processedData,
             _metadata: {
                 totalChannels: allChannels.length,
                 errors: providerErrors,
@@ -72,185 +68,92 @@ module.exports = async (req, res) => {
             }
         };
 
-        console.log(`Total channels loaded: ${allChannels.length}`);
-        console.log(`Categories: ${Object.keys(processedData).length}`);
-        
-        // Nastavíme správné hlavičky pro odpověď
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.status(200).json(response);
         
     } catch (error) {
         console.error('General error:', error);
-        res.status(500).json({ 
-            error: 'Failed to fetch channel data.', 
-            details: error.message,
-            channels: {},
-            errors: []
-        });
+        res.status(500).json({ error: 'Failed to fetch channel data.', details: error.message });
     }
 };
 
 // --- POMOCNÉ FUNKCE ---
 
-async function getChannelsWithRetry(provider, isFromAPI = false) {
-    const { server, username, password } = provider;
-    
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        try {
-            console.log(`Attempt ${attempt}/${MAX_RETRIES} for ${server}`);
-            
-            // Nejdříve zkusíme získat kategorie
-            let categoryMap = new Map();
-            try {
-                const categoriesUrl = `${server}/player_api.php?username=${username}&password=${password}&action=get_live_categories`;
-                const categoriesResponse = await axios.get(categoriesUrl, { 
-                    timeout: REQUEST_TIMEOUT,
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                    }
-                });
-                
-                if (Array.isArray(categoriesResponse.data)) {
-                    categoryMap = new Map(categoriesResponse.data.map(c => [c.category_id?.toString(), c.category_name || 'Uncategorized']));
-                }
-                console.log(`Loaded ${categoryMap.size} categories for ${server}`);
-            } catch (catError) {
-                console.warn(`Failed to load categories for ${server}: ${catError.message}`);
-            }
+async function getChannelsFromProvider(provider, isFromAPI) {
+    console.log(`Fetching channels from: ${provider.server}`);
+    const xtream = new Xtream({
+        url: provider.server,
+        username: provider.username,
+        password: provider.password,
+    });
 
-            // Získáme seznam kanálů
-            const apiUrl = `${server}/player_api.php?username=${username}&password=${password}&action=get_live_streams`;
-            console.log(`Fetching channels from: ${apiUrl}`);
-            
-            const response = await axios.get(apiUrl, { 
-                timeout: REQUEST_TIMEOUT,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Accept': 'application/json, text/plain, */*',
-                    'Accept-Encoding': 'gzip, deflate, br'
-                },
-                responseType: 'json',
-                decompress: true // Automaticky dekompresuje Brotli/Gzip
-            });
+    const [categories, streams] = await Promise.all([
+        xtream.getLiveCategories(),
+        xtream.getLiveStreams()
+    ]);
 
-            if (!response.data || !Array.isArray(response.data)) {
-                throw new Error('Invalid response from server - expected array of channels');
-            }
-            
-            if (response.data.length === 0) {
-                console.warn(`No channels found for ${server}`);
-                return [];
-            }
+    const categoryMap = new Map(categories.map(c => [c.category_id, c.category_name]));
 
-            console.log(`Found ${response.data.length} channels from ${server}`);
-            
-            const channels = response.data
-                .filter(channel => channel.stream_id && channel.name) // Filter out invalid channels
-                .map(channel => ({
-                    id: channel.stream_id.toString(),
-                    name: channel.name,
-                    logo: channel.stream_icon || null,
-                    categoryIds: [channel.category_id?.toString() || 'unknown'],
-                    url: `${server}/live/${username}/${password}/${channel.stream_id}.ts`,
-                    category_name: categoryMap.get(channel.category_id?.toString()) || 'Uncategorized',
-                    provider: { 
-                        server, 
-                        username, 
-                        password, 
-                        hostname: new url.URL(server).hostname,
-                        isFromAPI 
-                    }
-                }));
-
-            console.log(`Successfully processed ${channels.length} valid channels from ${server}`);
-            return channels;
-
-        } catch (error) {
-            console.warn(`Attempt ${attempt}/${MAX_RETRIES} for ${server} failed: ${error.message}`);
-            
-            if (attempt === MAX_RETRIES) {
-                throw new Error(`Failed after ${MAX_RETRIES} attempts: ${error.message}`);
-            }
-            
-            // Krátká pauza před dalším pokusem
-            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+    return streams.map(channel => ({
+        id: channel.stream_id.toString(),
+        name: channel.name,
+        logo: channel.stream_icon || null,
+        category_name: categoryMap.get(channel.category_id) || 'Uncategorized',
+        provider: {
+            ...provider,
+            hostname: new url.URL(provider.server).hostname,
+            isFromAPI
         }
-    }
+    }));
 }
 
 async function getSubscriptionsFromAmz() {
-    try {
-        const headers = {
-            'X-API-Key': AMZ_API_KEY,
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
-        };
-        
-        console.log('Fetching subscriptions from AMZ API...');
-        const response = await axios.get(`${AMZ_API_BASE_URL}/subscriptions`, { 
-            headers,
-            timeout: 10000
-        });
-        
-        if (!Array.isArray(response.data)) {
-            throw new Error('Invalid response from AMZ API - expected array');
-        }
-
-        const fullSubscriptions = [];
-        console.log(`Processing ${response.data.length} subscriptions from AMZ API...`);
-        
-        for (const sub of response.data) {
-            try {
-                const detailResponse = await axios.get(`${AMZ_API_BASE_URL}/subscription/${sub.hash}`, { 
-                    headers,
-                    timeout: 10000
-                });
-                
-                const { server, username, password } = detailResponse.data;
-                if (server && username && password) {
-                    fullSubscriptions.push({ server, username, password });
-                    console.log(`Added AMZ subscription: ${server} (${username})`);
-                } else {
-                    console.warn(`Incomplete subscription data for hash: ${sub.hash}`);
-                }
-            } catch (detailError) {
-                console.warn(`Failed to get details for subscription ${sub.hash}: ${detailError.message}`);
+    // Tato funkce zůstává stejná, protože používá specifické API, nikoliv Xtream
+    // ... (kód z předchozí verze getChannels.js)
+    const fetch = require('node-fetch'); // axios nahrazen za node-fetch pro jednoduchost
+    const headers = { 'X-API-Key': AMZ_API_KEY };
+    const response = await fetch(`${AMZ_API_BASE_URL}/subscriptions`, { headers });
+    if (!response.ok) throw new Error(`AMZ API responded with ${response.status}`);
+    const subs = await response.json();
+    
+    const fullSubscriptions = [];
+    for (const sub of subs) {
+        try {
+            const detailResponse = await fetch(`${AMZ_API_BASE_URL}/subscription/${sub.hash}`, { headers });
+            const detail = await detailResponse.json();
+            if (detail.server && detail.username && detail.password) {
+                fullSubscriptions.push(detail);
             }
-        }
-        
-        return fullSubscriptions;
-    } catch (error) {
-        console.error("Error fetching from AMZ API:", error.message);
-        if (error.response) {
-            console.error("AMZ API Response Status:", error.response.status);
-            console.error("AMZ API Response Data:", error.response.data);
-        }
-        throw error;
+        } catch (e) { console.warn(`Could not fetch AMZ sub detail for ${sub.hash}`); }
     }
+    return fullSubscriptions;
 }
+
 
 function processAndMergeChannels(channels) {
     const channelMap = new Map();
-    let processedCount = 0;
-    
     channels.forEach(channel => {
         const normalized = normalizeName(channel.name);
         if (!normalized) return;
-        
-        processedCount++;
-        const source = { 
-            id: channel.id, 
-            url: channel.url, 
-            provider: channel.provider 
+
+        const source = {
+            id: channel.id,
+            url: `${channel.provider.server}/live/${channel.provider.username}/${channel.provider.password}/${channel.id}.ts`,
+            provider: channel.provider
         };
-        
+
         if (channelMap.has(normalized)) {
-            channelMap.get(normalized).sources.push(source);
+            const existing = channelMap.get(normalized);
+            // Přidáme zdroj jen pokud je od jiného poskytovatele
+            if (!existing.sources.some(s => s.provider.server === source.provider.server)) {
+                existing.sources.push(source);
+            }
         } else {
-            channelMap.set(normalized, { 
-                name: channel.name, 
-                category: channel.category_name, 
-                logo: channel.logo, 
-                sources: [source] 
+            channelMap.set(normalized, {
+                name: channel.name,
+                category: channel.category_name,
+                logo: channel.logo,
+                sources: [source]
             });
         }
     });
@@ -260,57 +163,34 @@ function processAndMergeChannels(channels) {
         if (!categories[value.category]) categories[value.category] = [];
         categories[value.category].push(value);
     }
-
-    const sortedCategories = Object.keys(categories).sort((a, b) => a.localeCompare(b));
+    
+    // Seřadíme kategorie i kanály v nich
     const finalStructure = {};
-    sortedCategories.forEach(catName => {
-        finalStructure[catName] = categories[catName].sort((a, b) => a.name.localeCompare(b.name));
+    Object.keys(categories).sort((a,b)=>a.localeCompare(b)).forEach(catName => {
+        finalStructure[catName] = categories[catName].sort((a,b) => a.name.localeCompare(b.name));
     });
 
-    console.log(`Processed ${processedCount} channels into ${Object.keys(finalStructure).length} categories`);
     return finalStructure;
 }
 
-// OPRAVENÁ FUNKCE PRO PARSING M3U_PLUS ODKAZŮ
-function parseXtreamUrl(inputUrl) { 
-    try {
-        const parsed = new url.URL(inputUrl);
-        
-        // Pokud je to M3U_PLUS odkaz (obsahuje get.php)
-        if (parsed.pathname.includes('get.php')) {
-            const server = `${parsed.protocol}//${parsed.host}`;
-            const username = parsed.searchParams.get('username');
-            const password = parsed.searchParams.get('password');
-            
-            if (!server || !username || !password) {
-                throw new Error(`Missing required parameters in M3U_PLUS URL: ${inputUrl}`);
-            }
-            
-            console.log(`Parsed M3U_PLUS URL - Server: ${server}, Username: ${username}`);
-            return { server, username, password };
-        }
-        
-        // Původní logika pro běžné Xtream odkazy
-        const server = `${parsed.protocol}//${parsed.host}`;
-        const username = parsed.searchParams.get('username');
-        const password = parsed.searchParams.get('password');
-        
-        if (!server || !username || password === null) {
-            throw new Error(`Invalid Xtream URL format: ${inputUrl}`);
-        }
-        
-        return { server, username, password };
-    } catch (error) {
-        throw new Error(`Failed to parse URL "${inputUrl}": ${error.message}`);
+
+function parseXtreamUrl(inputUrl) {
+    const parsed = new url.URL(inputUrl);
+    const server = `${parsed.protocol}//${parsed.host}`;
+    const username = parsed.searchParams.get('username');
+    const password = parsed.searchParams.get('password');
+    if (!server || !username || !password) {
+        throw new Error(`Invalid M3U_PLUS URL: ${inputUrl}`);
     }
+    return { server, username, password };
 }
 
-function normalizeName(name) { 
+function normalizeName(name) {
     if (!name || typeof name !== 'string') return '';
     return name.toLowerCase()
         .replace(/\s*\(.*?\)\s*/g, '')
         .replace(/\s*\[.*?\]\s*/g, '')
-        .replace(/\b(hd|fhd|uhd|4k|8k|sd)\b/gi, '')
+        .replace(/\b(hd|fhd|uhd|4k|8k|sd|cz|sk)\b/gi, '')
         .replace(/[\s\-_|]+/g, '')
-        .trim(); 
+        .trim();
 }
