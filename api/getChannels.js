@@ -55,39 +55,33 @@ module.exports = async (req, res) => {
 
 // --- POMOCNÉ FUNKCE ---
 
-// ZÁSADNĚ PŘEPRACOVANÁ FUNKCE
+// Zůstává stejná jako v minulé opravě
 async function getChannelsWithRetry(provider) {
     const { server, username, password } = provider;
     
-    // Zkusíme se 5x připojit s různými proxy
     for (let i = 0; i < MAX_RETRIES; i++) {
         const proxy = proxyCache.length > 0 ? proxyCache[Math.floor(Math.random() * proxyCache.length)] : null;
         if (proxy) {
             globalTunnel.initialize({ protocol: proxy.type === 'http' ? 'http:' : 'socks:', host: proxy.host, port: proxy.port });
         }
-
         try {
-            // Krok 1: Získáme kategorie pomocí knihovny (je spolehlivá)
             const xtream = new Xtream({ url: server, username, password, serializer: standardizedSerializer });
             const categories = await xtream.getChannelCategories();
             const categoryMap = new Map(categories.map(c => [c.id, c.name]));
             
-            // Krok 2: Získáme kanály pomocí robustnějšího `axios`
             const apiUrl = `${server}/player_api.php?username=${username}&password=${password}&action=get_live_streams`;
             const response = await axios.get(apiUrl, { timeout: 15000 });
 
             if (!Array.isArray(response.data)) {
-                // Pokud odpověď není pole, server vrátil něco špatně
                 throw new Error('Invalid response from server, not an array.');
             }
             
-            // Mapování dat je teď potřeba udělat ručně, protože nepoužíváme serializer na kanály
             const channels = response.data.map(channel => ({
                 id: channel.stream_id.toString(),
                 name: channel.name,
                 logo: channel.stream_icon,
                 categoryIds: [channel.category_id.toString()],
-                url: `${server}/live/${username}/${password}/${channel.stream_id}.ts` // Standardní formát URL
+                url: `${server}/live/${username}/${password}/${channel.stream_id}.ts`
             }));
             
             const channelsWithCategories = channels.map(channel => ({
@@ -107,6 +101,35 @@ async function getChannelsWithRetry(provider) {
     
     console.error(`Failed to fetch from ${server} after ${MAX_RETRIES} attempts.`);
     return [];
+}
+
+// ZMĚNA JE POUZE ZDE
+async function getSubscriptionsFromAmz() {
+    try {
+        const headers = {
+            'X-API-Key': AMZ_API_KEY,
+            // Přidáme hlavičku, aby se náš skript tvářil jako prohlížeč
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
+        };
+        const response = await axios.get(`${AMZ_API_BASE_URL}/subscriptions`, { headers });
+        const fullSubscriptions = [];
+        for (const sub of response.data) {
+            // Hlavičku použijeme i pro detailní dotaz
+            const detailResponse = await axios.get(`${AMZ_API_BASE_URL}/subscription/${sub.hash}`, { headers });
+            const { server, username, password } = detailResponse.data;
+            if (server && username && password) {
+                fullSubscriptions.push({ server, username, password });
+            }
+        }
+        return fullSubscriptions;
+    } catch (error) {
+        // Přidáme detailnější logování chyby
+        console.error("Error fetching from AMZ API:", error.message);
+        if (error.response) {
+            console.error("AMZ API Response Data:", error.response.data);
+        }
+        return [];
+    }
 }
 
 
@@ -136,6 +159,5 @@ function processAndMergeChannels(channels) {
     return finalStructure;
 }
 async function updateProxyCacheIfNeeded() { if (Date.now() - lastProxyFetch < PROXY_CACHE_DURATION && proxyCache.length > 0) return; try { const httpResponse = await axios.get(PROXY_URLS.http, { timeout: 5000 }); const socks5Response = await axios.get(PROXY_URLS.socks5, { timeout: 5000 }); const httpProxies = httpResponse.data.split('\n').filter(Boolean).map(p => ({ type: 'http', host: p.split(':')[0], port: p.split(':')[1] })); const socks5Proxies = socks5Response.data.split('\n').filter(Boolean).map(p => ({ type: 'socks5', host: p.split(':')[0], port: p.split(':')[1] })); proxyCache = [...httpProxies, ...socks5Proxies]; lastProxyFetch = Date.now(); } catch (error) { console.error("Failed to fetch proxy lists:", error.message); } }
-async function getSubscriptionsFromAmz() { try { const response = await axios.get(`${AMZ_API_BASE_URL}/subscriptions`, { headers: { 'X-API-Key': AMZ_API_KEY } }); const fullSubscriptions = []; for (const sub of response.data) { const detailResponse = await axios.get(`${AMZ_API_BASE_URL}/subscription/${sub.hash}`, { headers: { 'X-API-Key': AMZ_API_KEY } }); const { server, username, password } = detailResponse.data; if (server && username && password) fullSubscriptions.push({ server, username, password }); } return fullSubscriptions; } catch (error) { console.error("Error fetching from AMZ API:", error.message); return []; } }
 function parseXtreamUrl(inputUrl) { const parsed = new url.URL(inputUrl); const server = `${parsed.protocol}//${parsed.host}`; const username = parsed.searchParams.get('username'); const password = parsed.searchParams.get('password'); if (!server || !username || password === null) throw new Error('Invalid URL'); return { server, username, password }; }
 function normalizeName(name) { return name.toLowerCase().replace(/\s*\(.*?\)\s*/g, '').replace(/\s*\[.*?\]\s*/g, '').replace(/hd|fhd|uhd|4k|8k|sd/g, '').replace(/[\s\-_|]+/g, '').trim(); }
