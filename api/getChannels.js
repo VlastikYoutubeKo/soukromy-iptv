@@ -21,7 +21,7 @@ module.exports = async (req, res) => {
         let allChannels = [];
         let providerErrors = [];
 
-        // Načteme AMZ API zdroje
+        // Načteme AMZ API zdroje (pouze pokud není rate limit)
         if (AMZ_API_KEY) {
             try {
                 const subscriptions = await getSubscriptionsFromAmz();
@@ -39,7 +39,9 @@ module.exports = async (req, res) => {
                 }
             } catch (error) {
                 console.warn(`AMZ API error: ${error.message}`);
-                providerErrors.push({ provider: 'AMZ API', error: error.message, source: 'AMZ API' });
+                if (!error.message.includes('Rate limit')) {
+                    providerErrors.push({ provider: 'AMZ API', error: error.message, source: 'AMZ API' });
+                }
             }
         }
 
@@ -62,12 +64,19 @@ module.exports = async (req, res) => {
         
         // Přidáme informace o chybách do odpovědi (pro debug)
         const response = {
-            channels: processedData,
-            totalChannels: allChannels.length,
-            errors: providerErrors
+            ...processedData, // Spread the categories directly
+            _metadata: {
+                totalChannels: allChannels.length,
+                errors: providerErrors,
+                categoriesCount: Object.keys(processedData).length
+            }
         };
 
         console.log(`Total channels loaded: ${allChannels.length}`);
+        console.log(`Categories: ${Object.keys(processedData).length}`);
+        
+        // Nastavíme správné hlavičky pro odpověď
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.status(200).json(response);
         
     } catch (error) {
@@ -116,8 +125,12 @@ async function getChannelsWithRetry(provider, isFromAPI = false) {
             const response = await axios.get(apiUrl, { 
                 timeout: REQUEST_TIMEOUT,
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                }
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Encoding': 'gzip, deflate, br'
+                },
+                responseType: 'json',
+                decompress: true // Automaticky dekompresuje Brotli/Gzip
             });
 
             if (!response.data || !Array.isArray(response.data)) {
