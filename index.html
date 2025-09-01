@@ -1,45 +1,1147 @@
 <!DOCTYPE html>
 <html lang="cs">
 <head>
-    <meta charset="UTF-T">
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IPTV Portál</title>
-    <link rel="stylesheet" href="style.css">
+    <title>IPTV Portál Pro</title>
+    <style>
+        /* Modern Dark Theme Styles */
+        :root { 
+            --bg-color: #121212; 
+            --primary-color: #1e1e1e; 
+            --secondary-color: #2a2a2a; 
+            --font-color: #e0e0e0; 
+            --accent-color: #03dac6; 
+            --accent-hover: #018786;
+            --border-color: #333;
+            --error-color: #ff5555;
+            --warning-color: #ffaa00;
+            --success-color: #50fa7b;
+            --info-color: #8be9fd;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
+            background: linear-gradient(135deg, var(--bg-color) 0%, #1a1a1a 100%);
+            color: var(--font-color); 
+            margin: 0; 
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container { 
+            max-width: 1400px; 
+            margin: 0 auto; 
+        }
+
+        header { 
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            padding: 30px; 
+            border-radius: 12px; 
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 { 
+            text-align: center; 
+            margin: 0 0 30px 0;
+            font-size: 2.5em;
+            font-weight: 300;
+            background: linear-gradient(135deg, var(--accent-color), #64ffda);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .controls { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 20px; 
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .input-group label {
+            font-weight: 500;
+            color: var(--accent-color);
+            font-size: 0.9em;
+        }
+
+        .button-group { 
+            display: flex; 
+            gap: 15px; 
+            flex-wrap: wrap;
+        }
+
+        .button-group button { 
+            flex: 1;
+            min-width: 180px;
+        }
+
+        textarea { 
+            width: 100%; 
+            min-height: 100px; 
+            background-color: var(--secondary-color); 
+            border: 2px solid var(--border-color); 
+            color: var(--font-color); 
+            border-radius: 8px; 
+            padding: 15px; 
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            transition: border-color 0.3s ease;
+            resize: vertical;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(3, 218, 198, 0.1);
+        }
+
+        button { 
+            padding: 15px 25px; 
+            background: linear-gradient(135deg, var(--accent-color), var(--accent-hover));
+            color: var(--bg-color); 
+            border: none; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            font-size: 16px; 
+            font-weight: 600; 
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        button:hover:not(:disabled) { 
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(3, 218, 198, 0.3);
+        }
+
+        button:disabled { 
+            background: linear-gradient(135deg, #555, #666);
+            cursor: not-allowed; 
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* Provider Selection Styles */
+        .provider-selection {
+            background: var(--primary-color);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            display: none;
+        }
+
+        .provider-selection.visible {
+            display: block;
+        }
+
+        .provider-selection h2 {
+            color: var(--accent-color);
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .provider-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+        }
+
+        .provider-card {
+            background: linear-gradient(135deg, var(--secondary-color), #333);
+            border-radius: 10px;
+            padding: 20px;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .provider-card:hover {
+            border-color: var(--accent-color);
+            transform: translateY(-2px);
+        }
+
+        .provider-card.selected {
+            border-color: var(--accent-color);
+            background: linear-gradient(135deg, var(--secondary-color), rgba(3, 218, 198, 0.1));
+        }
+
+        .provider-card.selected::before {
+            content: '✓';
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            background: var(--accent-color);
+            color: var(--bg-color);
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .provider-info h3 {
+            margin: 0 0 10px 0;
+            color: var(--font-color);
+            font-size: 1.1em;
+        }
+
+        .provider-details {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 8px 15px;
+            font-size: 0.9em;
+        }
+
+        .provider-details strong {
+            color: var(--info-color);
+        }
+
+        .provider-actions {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .show-channels-btn {
+            background: linear-gradient(135deg, var(--success-color), #45a049);
+            font-size: 14px;
+            padding: 10px 20px;
+            min-width: auto;
+        }
+
+        /* Channel Display Styles */
+        .channel-section {
+            display: none;
+        }
+
+        .channel-section.visible {
+            display: block;
+        }
+
+        .channel-filters {
+            background: var(--primary-color);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .filter-group label {
+            color: var(--accent-color);
+            font-weight: 500;
+        }
+
+        select {
+            background: var(--secondary-color);
+            border: 1px solid var(--border-color);
+            color: var(--font-color);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .category { 
+            margin-bottom: 40px; 
+            background: var(--primary-color);
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .category h2 { 
+            border-bottom: 3px solid var(--accent-color); 
+            padding-bottom: 15px; 
+            margin: 0 0 25px 0;
+            font-size: 1.8em;
+            font-weight: 400;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .category-count {
+            font-size: 0.6em;
+            background: var(--accent-color);
+            color: var(--bg-color);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+
+        .channel-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); 
+            gap: 20px; 
+        }
+
+        .channel { 
+            background: linear-gradient(135deg, var(--secondary-color), #333); 
+            padding: 20px; 
+            border-radius: 12px; 
+            text-align: center; 
+            cursor: pointer; 
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .channel:hover { 
+            transform: translateY(-8px); 
+            box-shadow: 0 12px 40px rgba(3, 218, 198, 0.2);
+            border-color: var(--accent-color);
+        }
+
+        .channel-logo { 
+            width: 70px; 
+            height: 70px; 
+            object-fit: contain; 
+            margin-bottom: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .channel-name { 
+            font-size: 15px; 
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: var(--font-color);
+        }
+
+        .source-indicators {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 8px;
+        }
+
+        .source-badge {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            border: 1px solid;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .source-badge.amz {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            border-color: #ff6b6b;
+            color: white;
+        }
+
+        .source-badge.manual {
+            background: linear-gradient(135deg, #74b9ff, #0984e3);
+            border-color: #74b9ff;
+            color: white;
+        }
+
+        .duplicate-indicator {
+            background: linear-gradient(135deg, var(--warning-color), #f39c12);
+            color: var(--bg-color);
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: bold;
+        }
+
+        .loader { 
+            border: 6px solid var(--secondary-color); 
+            border-top: 6px solid var(--accent-color); 
+            border-radius: 50%; 
+            width: 80px; 
+            height: 80px; 
+            animation: spin 1s linear infinite; 
+            margin: 60px auto; 
+        }
+
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+        }
+
+        .modal { 
+            display: none; 
+            position: fixed; 
+            z-index: 1000; 
+            left: 0; 
+            top: 0; 
+            width: 100%; 
+            height: 100%; 
+            overflow: auto; 
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content { 
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            margin: 5% auto; 
+            padding: 30px; 
+            border: 1px solid var(--border-color); 
+            width: 90%; 
+            max-width: 700px; 
+            border-radius: 16px; 
+            position: relative; 
+            animation: slideIn 0.4s ease;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        @keyframes slideIn { 
+            from { opacity: 0; transform: translateY(-50px) scale(0.9); } 
+            to { opacity: 1; transform: translateY(0) scale(1); } 
+        }
+
+        .close-button { 
+            color: #aaa; 
+            position: absolute; 
+            top: 15px; 
+            right: 25px; 
+            font-size: 32px; 
+            font-weight: bold; 
+            cursor: pointer;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+
+        .close-button:hover { 
+            color: var(--font-color);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #888;
+        }
+
+        .empty-state-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        /* Source Selection Modal */
+        .source-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 20px 0;
+        }
+
+        .source-item {
+            background: var(--secondary-color);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .source-item:hover {
+            border-color: var(--accent-color);
+        }
+
+        .source-item.selected {
+            border-color: var(--accent-color);
+            background: linear-gradient(135deg, var(--secondary-color), rgba(3, 218, 198, 0.1));
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container { padding: 0 10px; }
+            header { padding: 20px; }
+            h1 { font-size: 2em; }
+            .button-group { flex-direction: column; }
+            .button-group button { min-width: auto; }
+            .provider-grid { grid-template-columns: 1fr; }
+            .channel-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+            .channel-filters { flex-direction: column; align-items: stretch; }
+        }
+    </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Můj IPTV Portál</h1>
+            <h1>🎬 IPTV Portál Pro</h1>
             <div class="controls">
-                <textarea id="manualUrls" placeholder="Vložte další M3U_PLUS odkazy sem..."></textarea>
+                <div class="input-group">
+                    <label for="manualUrls">Další M3U_PLUS odkazy:</label>
+                    <textarea id="manualUrls" placeholder="Vložte další M3U_PLUS odkazy zde...&#10;(API zdroje se načtou automaticky)"></textarea>
+                </div>
                 <div class="button-group">
-                    <button id="loadChannelsBtn">Načíst kanály</button>
-                    <button id="showInfoBtn" disabled>ℹ️ Info o účtech</button>
+                    <button id="loadProvidersBtn">
+                        🔍 Načíst poskytovatele
+                    </button>
+                    <button id="showInfoBtn" disabled>
+                        ℹ️ Info o účtech
+                    </button>
                 </div>
             </div>
         </header>
+
+        <!-- Provider Selection Section -->
+        <div id="providerSelection" class="provider-selection">
+            <h2>📡 Vyberte poskytovatele</h2>
+            <div id="providerGrid" class="provider-grid"></div>
+            <div class="provider-actions">
+                <button id="showSelectedChannelsBtn" class="show-channels-btn" disabled>
+                    📺 Zobrazit kanály z vybraných zdrojů
+                </button>
+            </div>
+        </div>
+
+        <!-- Channel Display Section -->
+        <div id="channelSection" class="channel-section">
+            <div class="channel-filters">
+                <div class="filter-group">
+                    <label for="duplicateFilter">Zobrazit:</label>
+                    <select id="duplicateFilter">
+                        <option value="all">Všechny kanály</option>
+                        <option value="duplicates">Pouze duplicity</option>
+                        <option value="unique">Pouze unikátní</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="categoryFilter">Kategorie:</label>
+                    <select id="categoryFilter">
+                        <option value="all">Všechny kategorie</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="searchFilter">Hledat:</label>
+                    <input type="text" id="searchFilter" placeholder="Název kanálu..." style="background: var(--secondary-color); border: 1px solid var(--border-color); color: var(--font-color); padding: 8px 12px; border-radius: 6px;">
+                </div>
+            </div>
+            <div id="channelList"></div>
+        </div>
+
         <main id="mainContent">
             <div id="loader" class="loader" style="display: none;"></div>
-            <div id="channelList"></div>
         </main>
     </div>
 
+    <!-- EPG Modal -->
     <div id="epgModal" class="modal">
         <div class="modal-content">
             <span class="close-button">&times;</span>
-            <h2 id="epgChannelName"></h2>
+            <h2 id="epgChannelName">📺 Program</h2>
             <div id="epgList"></div>
         </div>
     </div>
 
+    <!-- Info Modal -->
     <div id="infoModal" class="modal">
         <div class="modal-content">
             <span class="close-button">&times;</span>
-            <h2>Informace o předplatných</h2>
+            <h2>📊 Informace o předplatných</h2>
             <div id="infoList"></div>
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <!-- Source Selection Modal -->
+    <div id="sourceModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <h2 id="sourceChannelName">🎯 Vyberte zdroj</h2>
+            <div id="sourceList" class="source-list"></div>
+            <div style="text-align: center; margin-top: 20px;">
+                <button id="playSelectedSource" disabled>▶️ Přehrát vybraný zdroj</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const loadProvidersBtn = document.getElementById('loadProvidersBtn');
+            const manualUrlsInput = document.getElementById('manualUrls');
+            const providerSelection = document.getElementById('providerSelection');
+            const providerGrid = document.getElementById('providerGrid');
+            const showSelectedChannelsBtn = document.getElementById('showSelectedChannelsBtn');
+            const channelSection = document.getElementById('channelSection');
+            const channelListDiv = document.getElementById('channelList');
+            const loader = document.getElementById('loader');
+            const showInfoBtn = document.getElementById('showInfoBtn');
+
+            // Filters
+            const duplicateFilter = document.getElementById('duplicateFilter');
+            const categoryFilter = document.getElementById('categoryFilter');
+            const searchFilter = document.getElementById('searchFilter');
+
+            // Modals
+            const epgModal = document.getElementById('epgModal');
+            const infoModal = document.getElementById('infoModal');
+            const sourceModal = document.getElementById('sourceModal');
+
+            let allProviders = [];
+            let selectedProviders = [];
+            let allChannelsData = {};
+            let currentChannelsData = {};
+
+            // Event listeners
+            loadProvidersBtn.addEventListener('click', loadProviders);
+            showSelectedChannelsBtn.addEventListener('click', loadChannelsFromSelectedProviders);
+            showInfoBtn.addEventListener('click', fetchAndDisplayInfo);
+            
+            // Filter event listeners
+            duplicateFilter.addEventListener('change', applyFilters);
+            categoryFilter.addEventListener('change', applyFilters);
+            searchFilter.addEventListener('input', debounce(applyFilters, 300));
+
+            // Modal close handlers
+            document.querySelectorAll('.modal .close-button').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    btn.closest('.modal').style.display = 'none';
+                });
+            });
+            
+            window.addEventListener('click', (event) => {
+                if (event.target.classList.contains('modal')) {
+                    event.target.style.display = 'none';
+                }
+            });
+
+            async function loadProviders() {
+                loader.style.display = 'block';
+                providerSelection.classList.remove('visible');
+                channelSection.classList.remove('visible');
+                
+                const manualUrls = manualUrlsInput.value.split('\n').filter(url => url.trim() !== '');
+                
+                try {
+                    const response = await fetch('/api/getChannels', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ manual_urls: manualUrls }),
+                    });
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Neznámá chyba serveru');
+                    }
+                    
+                    const responseData = await response.json();
+                    
+                    // Handle new response format
+                    allChannelsData = responseData.channels || responseData;
+                    const errors = responseData.errors || [];
+                    
+                    // Show any errors to user
+                    if (errors.length > 0) {
+                        console.warn('Provider errors:', errors);
+                    }
+                    
+                    // Extract unique providers
+                    const providerMap = new Map();
+                    Object.values(allChannelsData).flat().forEach(channel => {
+                        channel.sources.forEach(source => {
+                            const key = source.provider.server;
+                            if (!providerMap.has(key)) {
+                                providerMap.set(key, {
+                                    ...source.provider,
+                                    channelCount: 0,
+                                    isFromAPI: !manualUrls.some(url => url.includes(source.provider.hostname))
+                                });
+                            }
+                            providerMap.get(key).channelCount++;
+                        });
+                    });
+                    
+                    allProviders = Array.from(providerMap.values());
+                    displayProviders(allProviders);
+                    providerSelection.classList.add('visible');
+                    
+                } catch (error) {
+                    console.error('Error loading providers:', error);
+                    providerGrid.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">❌</div>
+                            <h3>Chyba při načítání</h3>
+                            <p>${error.message}</p>
+                        </div>
+                    `;
+                } finally {
+                    loader.style.display = 'none';
+                }
+            }
+
+            function displayProviders(providers) {
+                if (providers.length === 0) {
+                    providerGrid.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📡</div>
+                            <h3>Žádní poskytovatelé</h3>
+                            <p>Nebyly nalezeni žádní poskytovatelé.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                let html = '';
+                providers.forEach((provider, index) => {
+                    const sourceType = provider.isFromAPI ? 'AMZ API' : 'Manuální';
+                    const badgeClass = provider.isFromAPI ? 'amz' : 'manual';
+                    
+                    html += `
+                        <div class="provider-card" data-provider-index="${index}">
+                            <div class="provider-info">
+                                <h3>${provider.hostname}</h3>
+                                <div class="provider-details">
+                                    <strong>Uživatel:</strong> <span>${provider.username}</span>
+                                    <strong>Typ:</strong> <span class="source-badge ${badgeClass}">${sourceType}</span>
+                                    <strong>Kanály:</strong> <span>${provider.channelCount}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                providerGrid.innerHTML = html;
+                
+                // Add click handlers for provider selection
+                document.querySelectorAll('.provider-card').forEach(card => {
+                    card.addEventListener('click', () => {
+                        const index = parseInt(card.dataset.providerIndex);
+                        toggleProviderSelection(index, card);
+                    });
+                });
+            }
+
+            function toggleProviderSelection(index, cardElement) {
+                const provider = allProviders[index];
+                const isSelected = cardElement.classList.contains('selected');
+                
+                if (isSelected) {
+                    cardElement.classList.remove('selected');
+                    selectedProviders = selectedProviders.filter(p => p.server !== provider.server);
+                } else {
+                    cardElement.classList.add('selected');
+                    selectedProviders.push(provider);
+                }
+                
+                showSelectedChannelsBtn.disabled = selectedProviders.length === 0;
+                showInfoBtn.disabled = selectedProviders.length === 0;
+            }
+
+            function loadChannelsFromSelectedProviders() {
+                if (selectedProviders.length === 0) return;
+                
+                // Filter channels from selected providers only
+                const filteredChannels = {};
+                
+                Object.entries(allChannelsData).forEach(([category, channels]) => {
+                    const categoryChannels = [];
+                    
+                    channels.forEach(channel => {
+                        const filteredSources = channel.sources.filter(source => 
+                            selectedProviders.some(provider => provider.server === source.provider.server)
+                        );
+                        
+                        if (filteredSources.length > 0) {
+                            categoryChannels.push({
+                                ...channel,
+                                sources: filteredSources,
+                                isDuplicate: filteredSources.length > 1
+                            });
+                        }
+                    });
+                    
+                    if (categoryChannels.length > 0) {
+                        filteredChannels[category] = categoryChannels;
+                    }
+                });
+                
+                currentChannelsData = filteredChannels;
+                populateCategoryFilter(Object.keys(filteredChannels));
+                applyFilters();
+                channelSection.classList.add('visible');
+            }
+
+            function populateCategoryFilter(categories) {
+                const categoryFilter = document.getElementById('categoryFilter');
+                categoryFilter.innerHTML = '<option value="all">Všechny kategorie</option>';
+                
+                categories.forEach(category => {
+                    const option = document.createElement('option');
+                    option.value = category;
+                    option.textContent = category;
+                    categoryFilter.appendChild(option);
+                });
+            }
+
+            function applyFilters() {
+                const duplicateFilterValue = duplicateFilter.value;
+                const categoryFilterValue = categoryFilter.value;
+                const searchValue = searchFilter.value.toLowerCase().trim();
+                
+                let filteredData = {};
+                
+                Object.entries(currentChannelsData).forEach(([category, channels]) => {
+                    // Category filter
+                    if (categoryFilterValue !== 'all' && category !== categoryFilterValue) {
+                        return;
+                    }
+                    
+                    let filteredChannels = channels.filter(channel => {
+                        // Search filter
+                        if (searchValue && !channel.name.toLowerCase().includes(searchValue)) {
+                            return false;
+                        }
+                        
+                        // Duplicate filter
+                        if (duplicateFilterValue === 'duplicates' && !channel.isDuplicate) {
+                            return false;
+                        }
+                        if (duplicateFilterValue === 'unique' && channel.isDuplicate) {
+                            return false;
+                        }
+                        
+                        return true;
+                    });
+                    
+                    if (filteredChannels.length > 0) {
+                        filteredData[category] = filteredChannels;
+                    }
+                });
+                
+                displayChannels(filteredData);
+            }
+
+            function displayChannels(categories) {
+                if (Object.keys(categories).length === 0) {
+                    channelListDiv.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📺</div>
+                            <h3>Žádné kanály</h3>
+                            <p>Pro aktuální filtry nebyly nalezeny žádné kanály.</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                let html = '';
+                for (const categoryName in categories) {
+                    const categoryChannels = categories[categoryName];
+                    html += `
+                        <div class="category">
+                            <h2>
+                                ${categoryName}
+                                <span class="category-count">${categoryChannels.length}</span>
+                            </h2>
+                            <div class="channel-grid">
+                    `;
+                    
+                    categoryChannels.forEach((channel, index) => {
+                        const logo = channel.logo || 'https://via.placeholder.com/100?text=No+Logo';
+                        const sourcesBadges = channel.sources.map(source => {
+                            const isFromAPI = selectedProviders.find(p => p.server === source.provider.server)?.isFromAPI;
+                            const badgeClass = isFromAPI ? 'amz' : 'manual';
+                            const badgeText = isFromAPI ? 'API' : 'MAN';
+                            return `<span class="source-badge ${badgeClass}">${badgeText}</span>`;
+                        }).join('');
+                        
+                        html += `
+                            <div class="channel" data-category="${categoryName}" data-index="${index}">
+                                <div class="channel-content">
+                                    <img src="${logo}" alt="${channel.name}" class="channel-logo" onerror="this.src='https://via.placeholder.com/100?text=No+Logo';">
+                                    <div class="channel-name">${channel.name}</div>
+                                    <div class="source-indicators">
+                                        ${sourcesBadges}
+                                        ${channel.isDuplicate ? '<div class="duplicate-indicator">DUPLICITA</div>' : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    html += `</div></div>`;
+                }
+                channelListDiv.innerHTML = html;
+            }
+
+            // EPG Modal Logic
+            channelListDiv.addEventListener('click', async (event) => {
+                const channelEl = event.target.closest('.channel');
+                if (!channelEl) return;
+                
+                const category = channelEl.dataset.category;
+                const index = channelEl.dataset.index;
+                
+                // Get the filtered channel data
+                const filteredCategories = Object.entries(currentChannelsData).filter(([catName, channels]) => {
+                    const duplicateFilterValue = duplicateFilter.value;
+                    const categoryFilterValue = categoryFilter.value;
+                    const searchValue = searchFilter.value.toLowerCase().trim();
+                    
+                    if (categoryFilterValue !== 'all' && catName !== categoryFilterValue) return false;
+                    
+                    return channels.some(channel => {
+                        if (searchValue && !channel.name.toLowerCase().includes(searchValue)) return false;
+                        if (duplicateFilterValue === 'duplicates' && !channel.isDuplicate) return false;
+                        if (duplicateFilterValue === 'unique' && channel.isDuplicate) return false;
+                        return true;
+                    });
+                });
+                
+                const displayedChannels = {};
+                filteredCategories.forEach(([catName, channels]) => {
+                    const filteredChannels = channels.filter(channel => {
+                        const duplicateFilterValue = duplicateFilter.value;
+                        const searchValue = searchFilter.value.toLowerCase().trim();
+                        
+                        if (searchValue && !channel.name.toLowerCase().includes(searchValue)) return false;
+                        if (duplicateFilterValue === 'duplicates' && !channel.isDuplicate) return false;
+                        if (duplicateFilterValue === 'unique' && channel.isDuplicate) return false;
+                        return true;
+                    });
+                    if (filteredChannels.length > 0) {
+                        displayedChannels[catName] = filteredChannels;
+                    }
+                });
+                
+                const channel = displayedChannels[category][index];
+                
+                if (channel.sources.length === 1) {
+                    // Single source - show EPG directly
+                    showEpgModal(channel, channel.sources[0]);
+                } else {
+                    // Multiple sources - show source selection
+                    showSourceSelectionModal(channel);
+                }
+            });
+
+            function showEpgModal(channel, source) {
+                const epgChannelName = document.getElementById('epgChannelName');
+                const epgList = document.getElementById('epgList');
+
+                epgChannelName.textContent = `📺 ${channel.name}`;
+                epgList.innerHTML = '<div class="loader"></div>';
+                epgModal.style.display = 'block';
+
+                fetchEpgData(source.id, source.provider)
+                    .then(epgData => displayEpg(epgData))
+                    .catch(error => {
+                        epgList.innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📅</div>
+                                <h3>EPG není dostupný</h3>
+                                <p>${error.message}</p>
+                            </div>
+                        `;
+                    });
+            }
+
+            function showSourceSelectionModal(channel) {
+                const sourceChannelName = document.getElementById('sourceChannelName');
+                const sourceList = document.getElementById('sourceList');
+                const playSelectedSource = document.getElementById('playSelectedSource');
+
+                sourceChannelName.textContent = `🎯 ${channel.name} - Vyberte zdroj`;
+                
+                let html = '';
+                channel.sources.forEach((source, index) => {
+                    const provider = selectedProviders.find(p => p.server === source.provider.server);
+                    const sourceType = provider?.isFromAPI ? 'AMZ API' : 'Manuální';
+                    const badgeClass = provider?.isFromAPI ? 'amz' : 'manual';
+                    
+                    html += `
+                        <div class="source-item" data-source-index="${index}">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong>${source.provider.hostname}</strong>
+                                    <div style="color: #aaa; font-size: 0.9em;">${source.provider.username}</div>
+                                </div>
+                                <span class="source-badge ${badgeClass}">${sourceType}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                sourceList.innerHTML = html;
+                sourceModal.style.display = 'block';
+                playSelectedSource.disabled = true;
+
+                // Add source selection handlers
+                let selectedSourceIndex = -1;
+                document.querySelectorAll('.source-item').forEach((item, index) => {
+                    item.addEventListener('click', () => {
+                        document.querySelectorAll('.source-item').forEach(i => i.classList.remove('selected'));
+                        item.classList.add('selected');
+                        selectedSourceIndex = index;
+                        playSelectedSource.disabled = false;
+                    });
+                });
+
+                playSelectedSource.onclick = () => {
+                    if (selectedSourceIndex >= 0) {
+                        sourceModal.style.display = 'none';
+                        showEpgModal(channel, channel.sources[selectedSourceIndex]);
+                    }
+                };
+            }
+
+            async function fetchEpgData(channelId, provider) {
+                const response = await fetch('/api/getEpg', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ channelId, provider }) 
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Neznámá chyba serveru');
+                }
+                
+                return await response.json();
+            }
+            
+            function displayEpg(epgData) {
+                const epgList = document.getElementById('epgList');
+                if (!epgData || epgData.length === 0) { 
+                    epgList.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📅</div>
+                            <h3>Žádný program</h3>
+                            <p>Pro tento kanál není k dispozici žádný program.</p>
+                        </div>
+                    `; 
+                    return; 
+                }
+                
+                let html = '';
+                const now = new Date();
+                epgData.forEach(program => {
+                    const start = new Date(program.start); 
+                    const end = new Date(program.end);
+                    const isNowPlaying = start <= now && end > now;
+                    const timeFormat = { hour: '2-digit', minute: '2-digit' };
+                    
+                    html += `
+                        <div class="epg-item" style="${isNowPlaying ? 'background: linear-gradient(135deg, rgba(3, 218, 198, 0.2), rgba(1, 135, 134, 0.2)); border-left: 4px solid var(--accent-color);' : ''}">
+                            <div class="epg-time">
+                                ${start.toLocaleTimeString([], timeFormat)} - ${end.toLocaleTimeString([], timeFormat)}
+                                ${isNowPlaying ? ' <span style="color: var(--success-color); font-weight: bold;">● NYNÍ</span>' : ''}
+                            </div>
+                            <div class="epg-title">${program.title}</div>
+                            ${program.description ? `<div class="epg-desc">${program.description}</div>` : ''}
+                        </div>
+                    `;
+                });
+                epgList.innerHTML = html;
+            }
+
+            // Info modal logic
+            async function fetchAndDisplayInfo() {
+                const infoList = document.getElementById('infoList');
+                infoList.innerHTML = '<div class="loader"></div>';
+                infoModal.style.display = 'block';
+
+                let html = '';
+                for (const provider of selectedProviders) {
+                    try {
+                        const response = await fetch('/api/getInfo', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ provider }),
+                        });
+                        
+                        if (!response.ok) {
+                            const errorData = await response.json();
+                            throw new Error(errorData.error || 'Neznámá chyba serveru');
+                        }
+                        
+                        const { profile, serverInfo } = await response.json();
+                        html += generateInfoCard(profile, serverInfo, provider.isFromAPI);
+                    } catch (error) {
+                        html += generateInfoCardError(provider, error.message);
+                    }
+                }
+                infoList.innerHTML = html;
+            }
+
+            function generateInfoCard(profile, serverInfo, isFromAPI) {
+                const expires = profile.expiresAt ? new Date(profile.expiresAt).toLocaleString() : 'N/A';
+                const status = profile.status;
+                const statusColor = status === 'Active' ? 'var(--success-color)' : 
+                                  status === 'Expired' ? 'var(--error-color)' : 'var(--warning-color)';
+                const sourceType = isFromAPI ? 'AMZ API' : 'Manuální';
+                const badgeClass = isFromAPI ? 'amz' : 'manual';
+                
+                return `
+                    <div class="info-card">
+                        <h3>
+                            👤 ${profile.username} @ ${serverInfo.url}
+                            <span class="source-badge ${badgeClass}" style="margin-left: 10px;">${sourceType}</span>
+                        </h3>
+                        <div class="info-grid">
+                            <strong>Stav:</strong> <span style="color: ${statusColor}; font-weight: bold;">${status}</span>
+                            <strong>Vyprší:</strong> <span>${expires}</span>
+                            <strong>Připojení:</strong> <span>${profile.activeConnections} / ${profile.maxConnections}</span>
+                            <strong>Verze serveru:</strong> <span>${serverInfo.version} (${serverInfo.timezone})</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            function generateInfoCardError(provider, error) {
+                const sourceType = provider.isFromAPI ? 'AMZ API' : 'Manuální';
+                const badgeClass = provider.isFromAPI ? 'amz' : 'manual';
+                
+                return `
+                    <div class="info-card">
+                        <h3>
+                            ❌ ${provider.username} @ ${provider.hostname}
+                            <span class="source-badge ${badgeClass}" style="margin-left: 10px;">${sourceType}</span>
+                        </h3>
+                        <p style="color: var(--warning-color);">Informace se nepodařilo načíst: ${error}</p>
+                    </div>
+                `;
+            }
+
+            // Utility function for debouncing search
+            function debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
+        });
+    </script>
 </body>
 </html>
