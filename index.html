@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-T">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPTV Portál</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Můj IPTV Portál</h1>
+            <div class="controls">
+                <textarea id="manualUrls" placeholder="Vložte další M3U_PLUS odkazy sem..."></textarea>
+                <div class="button-group">
+                    <button id="loadChannelsBtn">Načíst kanály</button>
+                    <button id="showInfoBtn" disabled>ℹ️ Info o účtech</button>
+                </div>
+            </div>
+        </header>
+        <main id="mainContent">
+            <div id="loader" class="loader" style="display: none;"></div>
+            <div id="channelList"></div>
+        </main>
+    </div>
+
+    <div id="epgModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <h2 id="epgChannelName"></h2>
+            <div id="epgList"></div>
+        </div>
+    </div>
+
+    <div id="infoModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <h2>Informace o předplatných</h2>
+            <div id="infoList"></div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
