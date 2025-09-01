@@ -1,5 +1,7 @@
 const url = require('url');
+const axios = require('axios');
 const { Xtream } = require('@iptv/xtream-api');
+const { standardizedSerializer } = require('@iptv/xtream-api/standardized');
 
 // --- KONFIGURACE ---
 const AMZ_API_BASE_URL = 'https://amz.odjezdy.online/iptv/api';
@@ -19,15 +21,15 @@ module.exports = async (req, res) => {
         let allChannels = [];
         let providerErrors = [];
 
-        // Načteme AMZ API zdroje, pokud je k dispozici klíč
+        // Načteme AMZ API zdroje
         if (AMZ_API_KEY) {
             try {
                 const subscriptions = await getSubscriptionsFromAmz();
                 console.log(`Found ${subscriptions.length} AMZ subscriptions`);
-                const amzPromises = subscriptions.map(sub => 
+                const amzPromises = subscriptions.map(sub =>
                     getChannelsFromProvider(sub, true).catch(error => {
                         providerErrors.push({ provider: sub.server, error: error.message, source: 'AMZ API' });
-                        return []; // V případě chyby vrátíme prázdné pole
+                        return [];
                     })
                 );
                 const amzResults = await Promise.all(amzPromises);
@@ -85,20 +87,22 @@ async function getChannelsFromProvider(provider, isFromAPI) {
         url: provider.server,
         username: provider.username,
         password: provider.password,
+        serializer: standardizedSerializer
     });
 
+    // OPRAVA: Použití správných názvů funkcí
     const [categories, streams] = await Promise.all([
-        xtream.getLiveCategories(),
-        xtream.getLiveStreams()
+        xtream.getChannelCategories(),
+        xtream.getChannels()
     ]);
 
-    const categoryMap = new Map(categories.map(c => [c.category_id, c.category_name]));
+    const categoryMap = new Map(categories.map(c => [c.id, c.name]));
 
     return streams.map(channel => ({
-        id: channel.stream_id.toString(),
+        id: channel.id.toString(),
         name: channel.name,
-        logo: channel.stream_icon || null,
-        category_name: categoryMap.get(channel.category_id) || 'Uncategorized',
+        logo: channel.logo || null,
+        category_name: categoryMap.get(channel.categoryId) || 'Uncategorized',
         provider: {
             ...provider,
             hostname: new url.URL(provider.server).hostname,
@@ -108,23 +112,22 @@ async function getChannelsFromProvider(provider, isFromAPI) {
 }
 
 async function getSubscriptionsFromAmz() {
-    // Tato funkce zůstává stejná, protože používá specifické API, nikoliv Xtream
-    // ... (kód z předchozí verze getChannels.js)
-    const fetch = require('node-fetch'); // axios nahrazen za node-fetch pro jednoduchost
-    const headers = { 'X-API-Key': AMZ_API_KEY };
-    const response = await fetch(`${AMZ_API_BASE_URL}/subscriptions`, { headers });
-    if (!response.ok) throw new Error(`AMZ API responded with ${response.status}`);
-    const subs = await response.json();
+    const headers = { 'X-API-Key': AMZ_API_KEY, 'User-Agent': 'IPTV-Portal-Pro/2.0' };
+    const response = await axios.get(`${AMZ_API_BASE_URL}/subscriptions`, { headers, timeout: 10000 });
+    if (response.status !== 200) throw new Error(`AMZ API responded with ${response.status}`);
+    const subs = response.data;
     
     const fullSubscriptions = [];
     for (const sub of subs) {
         try {
-            const detailResponse = await fetch(`${AMZ_API_BASE_URL}/subscription/${sub.hash}`, { headers });
-            const detail = await detailResponse.json();
+            const detailResponse = await axios.get(`${AMZ_API_BASE_URL}/subscription/${sub.hash}`, { headers, timeout: 10000 });
+            const detail = detailResponse.data;
             if (detail.server && detail.username && detail.password) {
                 fullSubscriptions.push(detail);
             }
-        } catch (e) { console.warn(`Could not fetch AMZ sub detail for ${sub.hash}`); }
+        } catch (e) { 
+            console.warn(`Could not fetch AMZ sub detail for ${sub.hash}: ${e.message}`); 
+        }
     }
     return fullSubscriptions;
 }
@@ -144,7 +147,6 @@ function processAndMergeChannels(channels) {
 
         if (channelMap.has(normalized)) {
             const existing = channelMap.get(normalized);
-            // Přidáme zdroj jen pokud je od jiného poskytovatele
             if (!existing.sources.some(s => s.provider.server === source.provider.server)) {
                 existing.sources.push(source);
             }
@@ -164,7 +166,6 @@ function processAndMergeChannels(channels) {
         categories[value.category].push(value);
     }
     
-    // Seřadíme kategorie i kanály v nich
     const finalStructure = {};
     Object.keys(categories).sort((a,b)=>a.localeCompare(b)).forEach(catName => {
         finalStructure[catName] = categories[catName].sort((a,b) => a.name.localeCompare(b.name));
@@ -172,7 +173,6 @@ function processAndMergeChannels(channels) {
 
     return finalStructure;
 }
-
 
 function parseXtreamUrl(inputUrl) {
     const parsed = new url.URL(inputUrl);
