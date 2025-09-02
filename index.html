@@ -3,40 +3,104 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IPTV Portál</title>
+    <title>IPTV Portál Pro</title>
     <style>
         :root {
-            --bg-color: #121212; --primary-color: #1e1e1e; --secondary-color: #2a2a2a;
-            --font-color: #e0e0e0; --accent-color: #03dac6; --border-color: #333;
+            --bg-color: #121212; 
+            --primary-color: #1e1e1e; 
+            --secondary-color: #2a2a2a; 
+            --font-color: #e0e0e0; 
+            --accent-color: #03dac6; 
+            --accent-hover: #018786;
+            --border-color: #333;
+            --error-color: #ff5555;
+            --warning-color: #ffaa00;
         }
         * { box-sizing: border-box; }
-        body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; background: var(--bg-color); color: var(--font-color); margin: 0; padding: 20px; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
+            background: linear-gradient(135deg, var(--bg-color) 0%, #1a1a1a 100%);
+            color: var(--font-color); 
+            margin: 0; 
+            padding: 20px;
+        }
         .container { max-width: 1400px; margin: 0 auto; }
-        header { background: var(--primary-color); padding: 30px; border-radius: 12px; margin-bottom: 30px; }
-        h1 { text-align: center; margin: 0 0 30px 0; font-size: 2.5em; font-weight: 300; color: var(--accent-color); }
-        .button-group { display: flex; gap: 15px; }
-        textarea { width: 100%; min-height: 100px; background: var(--secondary-color); border: 1px solid var(--border-color); color: var(--font-color); border-radius: 8px; padding: 15px; margin-bottom: 15px; }
-        button { padding: 12px 20px; background-color: var(--accent-color); color: var(--bg-color); border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; flex-grow: 1; }
-        button:disabled { background-color: #555; cursor: not-allowed; }
-        .provider-selection, .channel-section { background: var(--primary-color); padding: 25px; border-radius: 12px; margin-bottom: 30px; }
+        header { 
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            padding: 30px; 
+            border-radius: 12px; 
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        h1 { 
+            text-align: center; 
+            margin: 0 0 30px 0;
+            font-size: 2.5em;
+            font-weight: 300;
+            background: linear-gradient(135deg, var(--accent-color), #64ffda);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        textarea { 
+            width: 100%; 
+            min-height: 100px; 
+            background-color: var(--secondary-color); 
+            border: 2px solid var(--border-color); 
+            color: var(--font-color); 
+            border-radius: 8px; 
+            padding: 15px; 
+            font-family: 'Consolas', 'Monaco', monospace;
+            resize: vertical;
+            margin-bottom: 15px;
+        }
+        button { 
+            padding: 15px 25px; 
+            background: linear-gradient(135deg, var(--accent-color), var(--accent-hover));
+            color: var(--bg-color); 
+            border: none; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            font-size: 16px; 
+            font-weight: 600; 
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+        button:hover:not(:disabled) { 
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(3, 218, 198, 0.3);
+        }
+        button:disabled { background: #555; cursor: not-allowed; transform: none; box-shadow: none; }
+        .provider-selection, .channel-section { display: none; background: var(--primary-color); border-radius: 12px; padding: 25px; margin-bottom: 30px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2); }
         .provider-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; }
-        .provider-card { background: var(--secondary-color); padding: 15px; border-radius: 8px; cursor: pointer; border: 2px solid transparent; transition: border-color 0.3s; }
+        .provider-card { background: linear-gradient(135deg, var(--secondary-color), #333); border-radius: 10px; padding: 20px; border: 2px solid transparent; transition: all 0.3s ease; cursor: pointer; position: relative; }
+        .provider-card:hover { border-color: var(--accent-color); }
         .provider-card.selected { border-color: var(--accent-color); }
-        .channel-filters { display: flex; gap: 15px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; }
-        select, input { background: var(--secondary-color); border: 1px solid var(--border-color); color: var(--font-color); padding: 8px 12px; border-radius: 6px; }
+        .provider-card.selected::before { content: '✓'; position: absolute; top: 10px; right: 15px; background: var(--accent-color); color: var(--bg-color); width: 25px; height: 25px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        .channel-filters { display: flex; gap: 15px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; }
+        select, input[type="text"] { background: var(--secondary-color); border: 1px solid var(--border-color); color: var(--font-color); padding: 8px 12px; border-radius: 6px; }
         .category-placeholder { min-height: 200px; }
-        .category-container h2 { border-bottom: 2px solid var(--accent-color); padding-bottom: 10px; margin-bottom: 20px; }
-        .channel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
-        .channel { background: var(--secondary-color); text-align: center; padding: 15px; border-radius: 8px; cursor: pointer; transition: transform 0.2s; }
-        .channel:hover { transform: translateY(-5px); }
-        .channel-logo { width: 60px; height: 60px; object-fit: contain; margin-bottom: 10px; }
-        .source-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: #444; margin: 0 2px; }
+        .category-container { margin-bottom: 30px; }
+        .category-container h2 { border-bottom: 2px solid var(--accent-color); padding-bottom: 10px; margin: 0 0 20px 0; }
+        .channel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
+        .channel { background: linear-gradient(135deg, var(--secondary-color), #333); padding: 20px; border-radius: 12px; text-align: center; cursor: pointer; transition: all 0.3s ease; border: 2px solid transparent; }
+        .channel:hover { transform: translateY(-8px); box-shadow: 0 12px 40px rgba(3, 218, 198, 0.2); border-color: var(--accent-color); }
+        .channel-logo { width: 70px; height: 70px; object-fit: contain; margin-bottom: 15px; border-radius: 8px; }
+        .channel-name { font-weight: 600; }
         .loader { border: 6px solid var(--secondary-color); border-top: 6px solid var(--accent-color); border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; margin: 50px auto; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
-        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); }
+        #errorLog { background: #4d2b2b; color: #ffc2c2; padding: 15px; border-radius: 8px; margin-top: 20px; font-family: monospace; white-space: pre-wrap; word-break: break-all; }
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(5px); }
         .modal-content { background: var(--primary-color); margin: 10% auto; padding: 20px; width: 90%; max-width: 600px; border-radius: 8px; }
         .epg-item { padding: 10px; border-bottom: 1px solid var(--secondary-color); }
-        #errorLog { background: #4d2b2b; color: #ffc2c2; padding: 15px; border-radius: 8px; margin-top: 20px; font-family: monospace; white-space: pre-wrap; }
+        .epg-item:last-child { border-bottom: none; }
+        .source-list { max-height: 300px; overflow-y: auto; margin: 20px 0; }
+        .source-item { background: var(--secondary-color); border-radius: 8px; padding: 15px; margin-bottom: 10px; border: 2px solid transparent; cursor: pointer; }
+        .source-item:hover { border-color: var(--accent-color); }
+        .source-item.selected { border-color: var(--accent-color); background: #333; }
+        .source-actions { display: flex; gap: 15px; margin-top: 20px; }
+        .button-group { display: flex; gap: 15px; }
+        .info-card { background: var(--secondary-color); border-radius: 8px; padding: 15px; margin-bottom: 15px; }
+        .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 15px; }
     </style>
 </head>
 <body>
@@ -52,13 +116,13 @@
         
         <div id="errorLog" style="display:none;"></div>
 
-        <div id="providerSelection" style="display:none;">
+        <div id="providerSelection" class="provider-selection">
             <h2>📡 Vyberte poskytovatele</h2>
             <div id="providerGrid" class="provider-grid"></div>
             <button id="showChannelsBtn" style="width:100%; margin-top:15px;" disabled>📺 Zobrazit kanály</button>
         </div>
 
-        <div id="channelSection" style="display:none;">
+        <div id="channelSection" class="channel-section">
             <div class="channel-filters">
                 <select id="comparisonFilter" disabled><option value="all">Všechny kanály</option><option value="shared">Pouze sdílené</option><option value="unique">Pouze unikátní</option></select>
                 <select id="categoryFilter"><option value="all">Všechny kategorie</option></select>
@@ -76,8 +140,24 @@
             <div id="epgList" style="max-height: 400px; overflow-y: auto;"></div>
         </div>
     </div>
-    <div id="infoModal" class="modal">
+
+    <div id="sourceModal" class="modal">
+        <div class="modal-content">
+            <h2 id="sourceChannelName"></h2>
+            <div class="source-list" id="sourceList"></div>
+            <div class="source-actions button-group">
+                <button id="playBtn" disabled>▶️ Přehrát</button>
+                <button id="showEpgBtn" disabled>📺 Zobrazit EPG</button>
+            </div>
         </div>
+    </div>
+    
+    <div id="infoModal" class="modal">
+        <div class="modal-content">
+            <h2>📊 Informace o účtech</h2>
+            <div id="infoList" style="max-height: 400px; overflow-y: auto;"></div>
+        </div>
+    </div>
 
     <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -101,8 +181,10 @@
         let filteredChannelsData = {};
         let intersectionObserver;
 
+        // *** PŘIDÁNÍ CHYBĚJÍCÍCH EVENT LISTENERŮ ***
         loadDataBtn.addEventListener('click', loadProviders);
         showChannelsBtn.addEventListener('click', prepareChannelView);
+        showInfoBtn.addEventListener('click', fetchAndDisplayInfo); // <-- TENTO ŘÁDEK CHYBĚL
         [comparisonFilter, categoryFilter, searchFilter].forEach(el => el.addEventListener('input', debounce(applyFilters, 300)));
         window.addEventListener('click', (e) => { if(e.target.classList.contains('modal')) e.target.style.display = 'none' });
 
@@ -250,8 +332,7 @@
                     ${channels.map(ch => `
                         <div class="channel" data-category="${escape(ch.category)}" data-channel-name="${escape(ch.name)}">
                             <img class="channel-logo" src="${ch.logo || ''}" onerror="this.style.display='none'">
-                            <div>${ch.name}</div>
-                            <div>${ch.sources.map(s => `<span class="source-badge">${s.provider.hostname.split('.')[0]}</span>`).join('')}</div>
+                            <div class="channel-name">${ch.name}</div>
                         </div>
                     `).join('')}
                 </div>`;
@@ -264,8 +345,66 @@
             const category = unescape(el.dataset.category);
             const name = unescape(el.dataset.channelName);
             const channel = filteredChannelsData[category].find(ch => ch.name === name);
-            const source = channel.sources[0];
             
+            if (channel.sources.length === 1) {
+                playStream(channel.sources[0]);
+            } else {
+                showSourceSelectionModal(channel);
+            }
+        }
+        
+        function playStream(source) {
+            const streamUrl = `${source.provider.server}/live/${source.provider.username}/${source.provider.password}/${source.id}.ts`;
+            window.open(streamUrl, '_blank');
+        }
+
+        function showSourceSelectionModal(channel) {
+            const sourceModal = document.getElementById('sourceModal');
+            document.getElementById('sourceChannelName').textContent = `Vyberte zdroj pro: ${channel.name}`;
+            const sourceList = document.getElementById('sourceList');
+            
+            sourceList.innerHTML = channel.sources.map((s, i) => `
+                <div class="source-item" data-source-index="${i}">
+                    <strong>${s.provider.hostname}</strong>
+                    <small>${s.provider.username}</small>
+                </div>
+            `).join('');
+
+            sourceModal.style.display = 'block';
+            
+            let selectedSource = null;
+            const playBtn = document.getElementById('playBtn');
+            const showEpgBtn = document.getElementById('showEpgBtn');
+
+            playBtn.disabled = true;
+            showEpgBtn.disabled = true;
+
+            sourceList.querySelectorAll('.source-item').forEach((item, index) => {
+                item.addEventListener('click', () => {
+                    sourceList.querySelectorAll('.source-item').forEach(el => el.classList.remove('selected'));
+                    item.classList.add('selected');
+                    selectedSource = channel.sources[index];
+                    playBtn.disabled = false;
+                    showEpgBtn.disabled = false;
+                });
+            });
+
+            playBtn.onclick = () => {
+                if (selectedSource) {
+                    playStream(selectedSource);
+                    sourceModal.style.display = 'none';
+                }
+            };
+            
+            showEpgBtn.onclick = () => {
+                if (selectedSource) {
+                    showEpgModal(channel, selectedSource);
+                    sourceModal.style.display = 'none';
+                }
+            };
+        }
+
+        async function showEpgModal(channel, source) {
             const epgModal = document.getElementById('epgModal');
             document.getElementById('epgChannelName').textContent = channel.name;
             const epgList = document.getElementById('epgList');
@@ -280,19 +419,81 @@
                 if(!res.ok) throw new Error((await res.json()).error || 'Neznámá chyba');
                 const epgData = await res.json();
                 
-                if (!epgData || !epgData.epg_listings || epgData.epg_listings.length === 0) {
+                console.log('Raw EPG Response:', epgData);
+                
+                if (!epgData || !Array.isArray(epgData.epg_listings) || epgData.epg_listings.length === 0) {
                     epgList.innerHTML = 'Pro tento kanál není dostupný program.';
                     return;
                 }
+                
                 epgList.innerHTML = epgData.epg_listings.map(p => {
-                     const start = new Date(parseInt(p.start_timestamp) * 1000);
-                     const title = atob(p.title);
-                     return `<div class="epg-item"><strong>${start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</strong> - ${title}</div>`
+                     try {
+                        const start = new Date(parseInt(p.start_timestamp) * 1000);
+                        const title = atob(p.title);
+                        const desc = p.description ? atob(p.description) : '';
+                        
+                        return `<div class="epg-item">
+                                    <strong>${start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</strong> - ${title}
+                                    ${desc ? `<br><small>${desc}</small>` : ''}
+                                </div>`
+                     } catch(e) { return ''; }
                 }).join('');
 
             } catch(e) {
                 epgList.innerHTML = `Chyba načítání EPG: ${e.message}`;
             }
+        }
+
+        // *** PŘIDÁNÍ CHYBĚJÍCÍCH FUNKCÍ PRO INFO MODAL ***
+        async function fetchAndDisplayInfo() {
+            const infoModal = document.getElementById('infoModal');
+            const infoList = document.getElementById('infoList');
+            infoList.innerHTML = '<div class="loader"></div>';
+            infoModal.style.display = 'block';
+
+            let html = '';
+            const providersToFetch = Array.from(selectedProviders.values());
+
+            for (const provider of providersToFetch) {
+                try {
+                    const response = await fetch('/api/getInfo', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ provider }),
+                    });
+                    if (!response.ok) throw new Error((await response.json()).error || 'Neznámá chyba serveru');
+                    
+                    const { profile, serverInfo } = await response.json();
+                    html += generateInfoCard(profile, serverInfo, provider);
+                } catch (error) {
+                    html += generateInfoCardError(provider, error.message);
+                }
+            }
+            infoList.innerHTML = html;
+        }
+
+        function generateInfoCard(profile, serverInfo, provider) {
+            const expires = profile.expires_at ? new Date(parseInt(profile.expires_at) * 1000).toLocaleString() : 'N/A';
+            const status = profile.status || 'N/A';
+            
+            return `
+                <div class="info-card">
+                    <h3>${provider.hostname}</h3>
+                    <div class="info-grid">
+                        <strong>Uživatel:</strong> <span>${profile.username}</span>
+                        <strong>Stav:</strong> <span>${status}</span>
+                        <strong>Vyprší:</strong> <span>${expires}</span>
+                        <strong>Připojení:</strong> <span>${profile.active_cons} / ${profile.max_connections}</span>
+                    </div>
+                </div>`;
+        }
+
+        function generateInfoCardError(provider, error) {
+            return `
+                <div class="info-card">
+                    <h3>${provider.hostname}</h3>
+                    <p style="color: var(--warning-color);">Informace se nepodařilo načíst: ${error}</p>
+                </div>`;
         }
         
         function debounce(func, delay) {
