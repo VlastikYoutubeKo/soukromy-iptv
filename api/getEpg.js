@@ -1,6 +1,7 @@
 const { Xtream } = require('@iptv/xtream-api');
 
 module.exports = async (req, res) => {
+    // CORS hlavičky
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -11,20 +12,31 @@ module.exports = async (req, res) => {
     try {
         const { channelId, provider } = req.body;
         if (!channelId || !provider) {
-            return res.status(400).json({ error: 'Missing channelId or provider info' });
+            return res.status(400).json({ error: 'Chybí channelId nebo informace o poskytovateli' });
         }
         
-        // Inicializace Xtream bez explicitního serializéru
         const xtream = new Xtream({
             url: provider.server,
             username: provider.username,
-            password: provider.password
+            password: provider.password,
+            http: { timeout: 15000 } // Zvýšený timeout
         });
         
         const epgData = await xtream.getFullEPG({ channelId });
+        
+        // *** ZDE JE KLÍČOVÁ ZMĚNA ***
+        // Logování surové odpovědi na straně serveru pro snadnější ladění
+        console.log(`[EPG LOG] Odpověď pro kanál ${channelId} od ${provider.hostname}:`, JSON.stringify(epgData, null, 2));
+
         res.status(200).json(epgData);
+
     } catch (error) {
-        console.error('EPG fetch error:', error);
-        res.status(500).json({ error: 'Failed to fetch EPG data.', details: error.message });
+        // Logování chyby na straně serveru
+        console.error(`[EPG ERROR] Chyba při načítání EPG pro kanál ${req.body.channelId} od ${req.body.provider?.hostname}:`, error.message);
+        
+        res.status(500).json({ 
+            error: 'Nepodařilo se načíst EPG data.', 
+            details: error.message 
+        });
     }
 };
