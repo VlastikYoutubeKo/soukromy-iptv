@@ -97,9 +97,6 @@
         .epg-title { margin: 5px 0; }
         .epg-desc { font-size: 0.9em; color: #aaa; }
         .modal-actions { margin-top: 20px; display: flex; gap: 15px; }
-        .source-list { max-height: 300px; overflow-y: auto; margin: 20px 0; }
-        .source-item { background: var(--secondary-color); border-radius: 8px; padding: 15px; margin-bottom: 10px; border: 2px solid transparent; cursor: pointer; }
-        .source-item:hover { border-color: var(--accent-color); }
         .button-group { display: flex; gap: 15px; }
         .info-card { background: var(--secondary-color); border-radius: 8px; padding: 15px; margin-bottom: 15px; }
         .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 15px; }
@@ -117,8 +114,19 @@
         </header>
         
         <div id="errorLog" style="display:none;"></div>
-        <div id="providerSelection" class="provider-selection"></div>
-        <div id="channelSection" class="channel-section"></div>
+        <div id="providerSelection" class="provider-selection">
+            <h2>📡 Vyberte poskytovatele</h2>
+            <div id="providerGrid" class="provider-grid"></div>
+            <button id="showChannelsBtn" style="width:100%; margin-top:15px;" disabled>📺 Zobrazit kanály</button>
+        </div>
+        <div id="channelSection" class="channel-section">
+            <div class="channel-filters">
+                <select id="comparisonFilter" disabled><option value="all">Všechny kanály</option><option value="shared">Pouze sdílené</option><option value="unique">Pouze unikátní</option></select>
+                <select id="categoryFilter"><option value="all">Všechny kategorie</option></select>
+                <input type="text" id="searchFilter" placeholder="Hledat kanál...">
+            </div>
+            <div id="channelList"></div>
+        </div>
         <div id="loader" style="display: none;"></div>
     </div>
 
@@ -134,7 +142,11 @@
     </div>
     
     <div id="infoModal" class="modal">
+        <div class="modal-content">
+            <h2>📊 Informace o účtech</h2>
+            <div id="infoList" style="max-height: 400px; overflow-y: auto;"></div>
         </div>
+    </div>
 
     <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -186,18 +198,6 @@
                 allProviders = [...providerMap.values()];
                 
                 displayProviders();
-                providerSelectionDiv.innerHTML = `
-                    <h2>📡 Vyberte poskytovatele</h2>
-                    <div class="provider-grid" id="providerGrid"></div>
-                    <button id="showChannelsBtn" style="width:100%; margin-top:15px;" disabled>📺 Zobrazit kanály</button>`;
-                document.getElementById('providerGrid').innerHTML = allProviders.map((p, i) => `
-                    <div class="provider-card" data-provider-index="${i}">
-                        <strong>${p.hostname}</strong><br>
-                        <small>${p.username} | ${p.channelCount} kanálů</small>
-                    </div>`).join('');
-                
-                document.querySelectorAll('.provider-card').forEach(card => card.addEventListener('click', toggleProviderSelection));
-                document.getElementById('showChannelsBtn').addEventListener('click', prepareChannelView);
                 providerSelectionDiv.style.display = 'block';
 
             } catch (error) {
@@ -206,6 +206,19 @@
             } finally {
                 loader.style.display = 'none';
             }
+        }
+
+        // *** OPRAVENÁ SEKCE: FUNKCE JE NYNÍ ZPĚT ***
+        function displayProviders() {
+            const providerGrid = document.getElementById('providerGrid');
+            providerGrid.innerHTML = allProviders.map((p, i) => `
+                <div class="provider-card" data-provider-index="${i}">
+                    <strong>${p.hostname}</strong><br>
+                    <small>${p.username} | ${p.channelCount} kanálů</small>
+                </div>`).join('');
+            
+            providerGrid.querySelectorAll('.provider-card').forEach(card => card.addEventListener('click', toggleProviderSelection));
+            document.getElementById('showChannelsBtn').addEventListener('click', prepareChannelView);
         }
 
         function toggleProviderSelection(event) {
@@ -224,17 +237,8 @@
         }
 
         function prepareChannelView() {
-            channelSectionDiv.innerHTML = `
-                <div class="channel-filters">
-                    <select id="comparisonFilter" ${selectedProviders.size < 2 ? 'disabled' : ''}><option value="all">Všechny kanály</option><option value="shared">Pouze sdílené</option><option value="unique">Pouze unikátní</option></select>
-                    <select id="categoryFilter"></select>
-                    <input type="text" id="searchFilter" placeholder="Hledat kanál...">
-                </div>
-                <div id="channelList"></div>`;
-
-            ['comparisonFilter', 'categoryFilter', 'searchFilter'].forEach(id => 
-                document.getElementById(id).addEventListener('input', debounce(applyFilters, 300))
-            );
+            const comparisonFilter = channelSectionDiv.querySelector('#comparisonFilter');
+            if (comparisonFilter) comparisonFilter.disabled = selectedProviders.size < 2;
 
             populateCategoryFilter();
             applyFilters();
@@ -248,15 +252,15 @@
                     categories.add(ch.category);
                 }
             });
-            document.getElementById('categoryFilter').innerHTML = '<option value="all">Všechny kategorie</option>' + 
+            channelSectionDiv.querySelector('#categoryFilter').innerHTML = '<option value="all">Všechny kategorie</option>' + 
                 [...categories].sort().map(c => `<option value="${c}">${c}</option>`).join('');
         }
 
         function applyFilters() {
             filteredChannelsData = {};
-            const search = document.getElementById('searchFilter').value.toLowerCase().trim();
-            const category = document.getElementById('categoryFilter').value;
-            const comparison = document.getElementById('comparisonFilter').value;
+            const search = channelSectionDiv.querySelector('#searchFilter').value.toLowerCase().trim();
+            const category = channelSectionDiv.querySelector('#categoryFilter').value;
+            const comparison = channelSectionDiv.querySelector('#comparisonFilter').value;
 
             Object.entries(allChannelsData).forEach(([cat, channels]) => {
                 if (category !== 'all' && cat !== category) return;
@@ -277,7 +281,7 @@
         }
 
         function displayChannelPlaceholders() {
-            const channelList = document.getElementById('channelList');
+            const channelList = channelSectionDiv.querySelector('#channelList');
             if (intersectionObserver) intersectionObserver.disconnect();
             channelList.innerHTML = '';
 
@@ -328,8 +332,7 @@
             const category = unescape(el.dataset.category);
             const name = unescape(el.dataset.channelName);
             const channel = filteredChannelsData[category].find(ch => ch.name === name);
-            
-            showEpgModal(channel, channel.sources[0]); // Zobrazíme EPG pro první dostupný zdroj
+            showEpgModal(channel, channel.sources[0]);
         }
         
         async function showEpgModal(channel, source) {
@@ -386,7 +389,58 @@
             }
         }
         
-        async function fetchAndDisplayInfo() { /* ... kód zůstává stejný ... */ }
+        // *** OPRAVENÁ SEKCE: FUNKCE JSOU NYNÍ ZPĚT ***
+        async function fetchAndDisplayInfo() {
+            const infoModal = document.getElementById('infoModal');
+            const infoList = document.getElementById('infoList');
+            infoList.innerHTML = '<div class="loader"></div>';
+            infoModal.style.display = 'block';
+
+            let html = '';
+            const providersToFetch = Array.from(selectedProviders.values());
+
+            for (const provider of providersToFetch) {
+                try {
+                    const response = await fetch('/api/getInfo', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ provider }),
+                    });
+                    if (!response.ok) throw new Error((await response.json()).error || 'Neznámá chyba serveru');
+                    
+                    const { profile, serverInfo } = await response.json();
+                    html += generateInfoCard(profile, serverInfo, provider);
+                } catch (error) {
+                    html += generateInfoCardError(provider, error.message);
+                }
+            }
+            infoList.innerHTML = html;
+        }
+
+        function generateInfoCard(profile, serverInfo, provider) {
+            const expires = profile.exp_date ? new Date(parseInt(profile.exp_date) * 1000).toLocaleString() : 'N/A';
+            const status = profile.status || 'N/A';
+            
+            return `
+                <div class="info-card">
+                    <h3>${provider.hostname}</h3>
+                    <div class="info-grid">
+                        <strong>Uživatel:</strong> <span>${profile.username}</span>
+                        <strong>Stav:</strong> <span>${status}</span>
+                        <strong>Vyprší:</strong> <span>${expires}</span>
+                        <strong>Připojení:</strong> <span>${profile.active_cons} / ${profile.max_connections}</span>
+                    </div>
+                </div>`;
+        }
+
+        function generateInfoCardError(provider, error) {
+            return `
+                <div class="info-card">
+                    <h3>${provider.hostname}</h3>
+                    <p style="color: var(--warning-color);">Informace se nepodařilo načíst: ${error}</p>
+                </div>`;
+        }
+        
         function debounce(func, delay) {
             let timeout;
             return (...args) => {
