@@ -4,7 +4,6 @@ const { Xtream } = require('@iptv/xtream-api');
 
 // --- KONFIGURACE ---
 const AMZ_API_BASE_URL = 'https://amz.odjezdy.online/iptv/api';
-// Zde se nyní očekává string klíčů oddělených čárkou
 const API_KEYS = process.env.AMZ_API_KEY ? process.env.AMZ_API_KEY.split(',').map(k => k.trim()).filter(Boolean) : [];
 
 // --- HLAVNÍ FUNKCE ---
@@ -23,23 +22,24 @@ module.exports = async (req, res) => {
 
         // Načteme AMZ API zdroje pro každý klíč
         if (API_KEYS.length > 0) {
-            console.log(`Found ${API_KEYS.length} AMZ API key(s).`);
-            const amzPromises = API_KEYS.map(apiKey => 
-                getSubscriptionsFromAmz(apiKey).catch(error => {
-                    providerErrors.push({ provider: `AMZ API Key (${apiKey.substring(0, 4)}...)`, error: error.message, source: 'AMZ API' });
-                    return []; // V případě chyby vrátíme prázdné pole, aby ostatní klíče mohly pokračovat
-                })
+            console.log(`Processing ${API_KEYS.length} AMZ API key(s).`);
+            const keyPromises = API_KEYS.map(apiKey => 
+                getSubscriptionsFromAmz(apiKey)
+                    .then(subscriptions => {
+                        const channelPromises = subscriptions.map(sub => getChannelsFromProvider(sub, true).catch(e => {
+                            providerErrors.push({ provider: sub.server, error: e.message, source: 'AMZ API' });
+                            return [];
+                        }));
+                        return Promise.all(channelPromises);
+                    })
+                    .catch(error => {
+                        providerErrors.push({ provider: `AMZ API Key (${apiKey.substring(0, 4)}...)`, error: error.message, source: 'AMZ API' });
+                        return [];
+                    })
             );
-            const allSubscriptions = (await Promise.all(amzPromises)).flat();
             
-            if (allSubscriptions.length > 0) {
-                 const channelPromises = allSubscriptions.map(sub => getChannelsFromProvider(sub, true).catch(error => {
-                    providerErrors.push({ provider: sub.server, error: error.message, source: 'AMZ API' });
-                    return [];
-                }));
-                const amzResults = await Promise.all(channelPromises);
-                allChannels.push(...amzResults.flat());
-            }
+            const results = await Promise.all(keyPromises);
+            allChannels.push(...results.flat(2));
         }
 
         // Načteme manuální URLs
@@ -48,16 +48,16 @@ module.exports = async (req, res) => {
                 if (!manualUrl.trim()) return Promise.resolve([]);
                 try {
                     const provider = parseXtreamUrl(manualUrl);
-                    return getChannelsFromProvider(provider, false).catch(error => {
-                        providerErrors.push({ provider: manualUrl, error: error.message, source: 'Manual' });
-                        return [];
-                    });
+                    return getChannelsFromProvider(provider, false);
                 } catch (error) {
                     providerErrors.push({ provider: manualUrl, error: error.message, source: 'Manual' });
                     return Promise.resolve([]);
                 }
             });
-            const manualResults = await Promise.all(manualPromises);
+            const manualResults = await Promise.all(manualPromises.map(p => p.catch(e => {
+                 providerErrors.push({ provider: 'Manual URL processing', error: e.message, source: 'Manual' });
+                 return [];
+            })));
             allChannels.push(...manualResults.flat());
         }
 
@@ -79,11 +79,11 @@ module.exports = async (req, res) => {
 };
 
 async function getSubscriptionsFromAmz(apiKey) {
-    const headers = { 'X-API-Key': apiKey, 'User-Agent': 'IPTV-Portal-Pro/2.1' };
-    const { data: subs } = await axios.get(`${AMZ_API_BASE_URL}/subscriptions`, { headers, timeout: 10000 });
+    const headers = { 'X-API-Key': apiKey, 'User-Agent': 'IPTV-Portal-Pro/2.2' };
+    const { data: subs } = await axios.get(`${AMZ_API_BASE_URL}/subscriptions`, { headers, timeout: 15000 });
     
     const subPromises = subs.map(sub => 
-        axios.get(`${AMZ_API_BASE_URL}/subscription/${sub.hash}`, { headers, timeout: 10000 })
+        axios.get(`${AMZ_API_BASE_URL}/subscription/${sub.hash}`, { headers, timeout: 15000 })
              .then(res => res.data)
              .catch(e => {
                  console.warn(`Could not fetch AMZ sub detail for ${sub.hash}: ${e.message}`);
@@ -102,9 +102,10 @@ async function getChannelsFromProvider(provider, isFromAPI) {
         password: provider.password,
     });
 
+    // Získáme všechny kanály (knihovna si sama řeší stránkování)
     const [categories, streams] = await Promise.all([
         xtream.getChannelCategories(),
-        xtream.getChannels()
+        xtream.getChannels({ limit: Infinity }) 
     ]);
 
     const categoryMap = new Map(categories.map(c => [c.category_id, c.category_name]));
@@ -122,7 +123,7 @@ function processAndMergeChannels(channels) {
     const channelMap = new Map();
     channels.forEach(channel => {
         const normalized = normalizeName(channel.name);
-        if (!normalized) return;
+        if (!normalized || !channel.id) return;
         
         const source = {
             id: channel.id,
@@ -132,6 +133,7 @@ function processAndMergeChannels(channels) {
         
         if (channelMap.has(normalized)) {
             const existing = channelMap.get(normalized);
+            // Přidáme zdroj jen pokud je od jiného poskytovatele
             if (!existing.sources.some(s => s.provider.server === source.provider.server)) {
                 existing.sources.push(source);
             }
@@ -161,19 +163,11 @@ function processAndMergeChannels(channels) {
 }
 
 function parseXtreamUrl(inputUrl) {
-    try {
-        const parsed = new url.URL(inputUrl);
-        const username = parsed.searchParams.get('username');
-        const password = parsed.searchParams.get('password');
-        if (!username || !password) throw new Error("Missing username or password in URL.");
-        return {
-            server: `${parsed.protocol}//${parsed.host}`,
-            username,
-            password,
-        };
-    } catch (error) {
-        throw new Error(`Invalid URL format: ${error.message}`);
-    }
+    const parsed = new url.URL(inputUrl);
+    const username = parsed.searchParams.get('username');
+    const password = parsed.searchParams.get('password');
+    if (!username || !password) throw new Error("Missing username or password.");
+    return { server: `${parsed.protocol}//${parsed.host}`, username, password };
 }
 
 function normalizeName(name) {
