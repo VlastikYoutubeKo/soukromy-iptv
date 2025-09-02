@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IPTV Portál Pro</title>
+    <title>IPTV Portál</title>
     <style>
         :root {
             --bg-color: #121212; --primary-color: #1e1e1e; --secondary-color: #2a2a2a;
             --font-color: #e0e0e0; --accent-color: #03dac6; --border-color: #333;
         }
         * { box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--font-color); margin: 0; padding: 20px; }
+        body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; background: var(--bg-color); color: var(--font-color); margin: 0; padding: 20px; }
         .container { max-width: 1400px; margin: 0 auto; }
         header { background: var(--primary-color); padding: 30px; border-radius: 12px; margin-bottom: 30px; }
         h1 { text-align: center; margin: 0 0 30px 0; font-size: 2.5em; font-weight: 300; color: var(--accent-color); }
@@ -24,12 +24,9 @@
         .provider-card.selected { border-color: var(--accent-color); }
         .channel-filters { display: flex; gap: 15px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; }
         select, input { background: var(--secondary-color); border: 1px solid var(--border-color); color: var(--font-color); padding: 8px 12px; border-radius: 6px; }
-        
-        /* === Lazy Loading & Performance === */
-        .category-placeholder { min-height: 300px; /* Aby se observer spustil */ }
+        .category-placeholder { min-height: 200px; }
         .category-container h2 { border-bottom: 2px solid var(--accent-color); padding-bottom: 10px; margin-bottom: 20px; }
         .channel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
-        
         .channel { background: var(--secondary-color); text-align: center; padding: 15px; border-radius: 8px; cursor: pointer; transition: transform 0.2s; }
         .channel:hover { transform: translateY(-5px); }
         .channel-logo { width: 60px; height: 60px; object-fit: contain; margin-bottom: 10px; }
@@ -39,18 +36,21 @@
         .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); }
         .modal-content { background: var(--primary-color); margin: 10% auto; padding: 20px; width: 90%; max-width: 600px; border-radius: 8px; }
         .epg-item { padding: 10px; border-bottom: 1px solid var(--secondary-color); }
+        #errorLog { background: #4d2b2b; color: #ffc2c2; padding: 15px; border-radius: 8px; margin-top: 20px; font-family: monospace; white-space: pre-wrap; }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🎬 IPTV Portál Pro</h1>
-            <textarea id="manualUrls" placeholder="Vložte manuální M3U_PLUS odkazy (každý na nový řádek)"></textarea>
+            <h1>🎬 IPTV Portál</h1>
+            <textarea id="manualUrls" placeholder="Vložte M3U_PLUS odkazy (každý na nový řádek)"></textarea>
             <div class="button-group">
                 <button id="loadDataBtn">🔍 Načíst data</button>
                 <button id="showInfoBtn" disabled>ℹ️ Info o účtech</button>
             </div>
         </header>
+        
+        <div id="errorLog" style="display:none;"></div>
 
         <div id="providerSelection" style="display:none;">
             <h2>📡 Vyberte poskytovatele</h2>
@@ -76,9 +76,11 @@
             <div id="epgList" style="max-height: 400px; overflow-y: auto;"></div>
         </div>
     </div>
+    <div id="infoModal" class="modal">
+        </div>
+
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        // --- Elementy ---
         const loadDataBtn = document.getElementById('loadDataBtn');
         const manualUrlsInput = document.getElementById('manualUrls');
         const providerSelectionDiv = document.getElementById('providerSelection');
@@ -87,29 +89,26 @@
         const channelSectionDiv = document.getElementById('channelSection');
         const channelListDiv = document.getElementById('channelList');
         const loader = document.getElementById('loader');
+        const errorLogDiv = document.getElementById('errorLog');
         const comparisonFilter = document.getElementById('comparisonFilter');
         const categoryFilter = document.getElementById('categoryFilter');
         const searchFilter = document.getElementById('searchFilter');
         const showInfoBtn = document.getElementById('showInfoBtn');
 
-        // --- Stav Aplikace ---
         let allProviders = [];
         let selectedProviders = new Map();
         let allChannelsData = {};
         let filteredChannelsData = {};
         let intersectionObserver;
 
-        // --- Event Listeners ---
         loadDataBtn.addEventListener('click', loadProviders);
         showChannelsBtn.addEventListener('click', prepareChannelView);
         [comparisonFilter, categoryFilter, searchFilter].forEach(el => el.addEventListener('input', debounce(applyFilters, 300)));
         window.addEventListener('click', (e) => { if(e.target.classList.contains('modal')) e.target.style.display = 'none' });
 
-        // --- Logika Aplikace ---
-
         async function loadProviders() {
             loader.style.display = 'block';
-            [providerSelectionDiv, channelSectionDiv].forEach(el => el.style.display = 'none');
+            [providerSelectionDiv, channelSectionDiv, errorLogDiv].forEach(el => el.style.display = 'none');
             providerGrid.innerHTML = '';
             
             try {
@@ -119,10 +118,14 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ manual_urls }),
                 });
-                if (!response.ok) throw new Error((await response.json()).error || 'Chyba serveru');
+                if (!response.ok) throw new Error(`Chyba serveru: ${response.statusText}`);
                 
                 const responseData = await response.json();
-                if (responseData._metadata.errors.length) console.warn('Chyby při načítání:', responseData._metadata.errors);
+                
+                if (responseData._metadata.errors.length) {
+                    errorLogDiv.innerHTML = '<strong>Chyby při načítání:</strong><br>' + responseData._metadata.errors.map(e => `&bull; ${e.provider}: ${e.error}`).join('<br>');
+                    errorLogDiv.style.display = 'block';
+                }
                 delete responseData._metadata;
                 allChannelsData = responseData;
 
@@ -137,8 +140,8 @@
                 providerSelectionDiv.style.display = 'block';
 
             } catch (error) {
-                console.error('Nepodařilo se načíst poskytovatele:', error);
-                providerGrid.innerHTML = `<p style="color:red;">${error.message}</p>`;
+                errorLogDiv.textContent = `Nepodařilo se načíst poskytovatele: ${error.message}`;
+                errorLogDiv.style.display = 'block';
             } finally {
                 loader.style.display = 'none';
             }
@@ -148,7 +151,7 @@
             providerGrid.innerHTML = allProviders.map((p, i) => `
                 <div class="provider-card" data-provider-index="${i}">
                     <strong>${p.hostname}</strong><br>
-                    <small>${p.isFromAPI ? 'API' : 'Manuální'} | ${p.channelCount} kanálů</small>
+                    <small>${p.username} | ${p.channelCount} kanálů</small>
                 </div>`).join('');
             
             providerGrid.querySelectorAll('.provider-card').forEach(card => card.addEventListener('click', toggleProviderSelection));
@@ -215,7 +218,7 @@
 
             const categories = Object.keys(filteredChannelsData);
             if(categories.length === 0) {
-                 channelListDiv.innerHTML = `<div class="empty-state">Žádné kanály nevyhovují filtrům.</div>`;
+                 channelListDiv.innerHTML = `<div style="text-align:center; padding: 40px;">Žádné kanály nevyhovují filtrům.</div>`;
                  return;
             }
 
@@ -223,8 +226,7 @@
                 entries.forEach(entry => {
                     if (entry.isIntersecting) {
                         const placeholder = entry.target;
-                        const categoryName = placeholder.dataset.category;
-                        renderCategory(placeholder, categoryName);
+                        renderCategory(placeholder, placeholder.dataset.category);
                         observer.unobserve(placeholder);
                     }
                 });
@@ -262,9 +264,8 @@
             const category = unescape(el.dataset.category);
             const name = unescape(el.dataset.channelName);
             const channel = filteredChannelsData[category].find(ch => ch.name === name);
+            const source = channel.sources[0];
             
-            // Logika pro EPG
-            const source = channel.sources[0]; // Zobrazíme EPG pro první zdroj
             const epgModal = document.getElementById('epgModal');
             document.getElementById('epgChannelName').textContent = channel.name;
             const epgList = document.getElementById('epgList');
@@ -276,24 +277,17 @@
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ channelId: source.id, provider: source.provider })
                 });
-                if(!res.ok) throw new Error(await res.text());
+                if(!res.ok) throw new Error((await res.json()).error || 'Neznámá chyba');
                 const epgData = await res.json();
                 
-                // **OPRAVA ZOBRAZENÍ EPG**
                 if (!epgData || !epgData.epg_listings || epgData.epg_listings.length === 0) {
-                    epgList.innerHTML = 'Žádná data programu.';
+                    epgList.innerHTML = 'Pro tento kanál není dostupný program.';
                     return;
                 }
                 epgList.innerHTML = epgData.epg_listings.map(p => {
                      const start = new Date(parseInt(p.start_timestamp) * 1000);
-                     const end = new Date(parseInt(p.end_timestamp) * 1000);
                      const title = atob(p.title);
-                     const desc = p.description ? atob(p.description) : '';
-                     return `<div class="epg-item">
-                                <strong>${start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - ${end.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</strong><br>
-                                ${title}<br>
-                                <small>${desc}</small>
-                            </div>`
+                     return `<div class="epg-item"><strong>${start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</strong> - ${title}</div>`
                 }).join('');
 
             } catch(e) {
