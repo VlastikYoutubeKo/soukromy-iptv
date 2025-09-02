@@ -3,6 +3,7 @@ const { Xtream } = require('@iptv/xtream-api');
 
 // --- HLAVNÍ FUNKCE ---
 module.exports = async (req, res) => {
+    // Nastavení CORS hlaviček
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -12,6 +13,7 @@ module.exports = async (req, res) => {
 
     try {
         const { manual_urls = [] } = req.body;
+        // Pokud nejsou žádné URL, vrátíme prázdnou odpověď
         if (manual_urls.length === 0) {
             return res.status(200).json({ _metadata: { totalChannels: 0, errors: [], categoriesCount: 0 } });
         }
@@ -19,25 +21,30 @@ module.exports = async (req, res) => {
         let allChannels = [];
         let providerErrors = [];
 
-        // Zpracujeme manuální URLs
-        const manualPromises = manual_urls.map(manualUrl => {
-            if (!manualUrl.trim()) return Promise.resolve([]);
-            try {
-                const provider = parseXtreamUrl(manualUrl);
-                return getChannelsFromProvider(provider, false);
-            } catch (error) {
-                providerErrors.push({ provider: manualUrl, error: error.message, source: 'Manual' });
-                return Promise.resolve([]);
-            }
-        });
+        // Vytvoříme pole "slibů" pro každou URL
+        const providerPromises = manual_urls
+            .filter(u => u.trim() !== '') // Ignorujeme prázdné řádky
+            .map(manualUrl => {
+                try {
+                    const provider = parseXtreamUrl(manualUrl);
+                    // Pro každou URL zavoláme funkci a připojíme vlastní .catch() pro odchycení chyby
+                    return getChannelsFromProvider(provider).catch(error => {
+                        let errorMessage = error.message;
+                        if (error.message.includes('JSON')) {
+                            errorMessage = 'Server vrátil neplatná data (může být offline nebo blokován).';
+                        }
+                        providerErrors.push({ provider: provider.hostname, error: errorMessage, source: 'Manual' });
+                        return []; // V případě chyby vrátíme prázdné pole kanálů
+                    });
+                } catch (error) {
+                    providerErrors.push({ provider: manualUrl, error: 'Neplatný formát URL.', source: 'Manual' });
+                    return Promise.resolve([]); // Pokud je URL neparsovatelná, vrátíme prázdné pole
+                }
+            });
 
-        const manualResults = await Promise.all(manualPromises.map(p => p.catch(e => {
-            // Zachytíme chyby z jednotlivých providerů, aby ostatní mohli pokračovat
-            providerErrors.push({ provider: e.config?.url || 'Manual URL', error: e.message, source: 'Manual' });
-            return [];
-        })));
-        
-        allChannels.push(...manualResults.flat());
+        // Počkáme, až se všechny "sliby" dokončí (buď s daty, nebo s prázdným polem po chybě)
+        const results = await Promise.all(providerPromises);
+        allChannels = results.flat(); // Spojíme všechny výsledky do jednoho pole
 
         const processedData = processAndMergeChannels(allChannels);
         
@@ -52,22 +59,21 @@ module.exports = async (req, res) => {
         
     } catch (error) {
         console.error('General error:', error);
-        res.status(500).json({ error: 'Failed to fetch channel data.', details: error.message });
+        res.status(500).json({ error: 'Nastala neočekávaná chyba serveru.', details: error.message });
     }
 };
 
-async function getChannelsFromProvider(provider, isFromAPI) {
+async function getChannelsFromProvider(provider) {
     const xtream = new Xtream({
         url: provider.server,
         username: provider.username,
         password: provider.password,
-        // Zvýšíme timeout pro pomalejší servery
-        http: { timeout: 20000 } 
+        http: { timeout: 15000 } // Timeout 15 sekund
     });
 
     const [categories, streams] = await Promise.all([
         xtream.getChannelCategories(),
-        xtream.getChannels({ limit: Infinity }) 
+        xtream.getChannels({ limit: Infinity })
     ]);
 
     const categoryMap = new Map(categories.map(c => [c.category_id, c.category_name]));
@@ -77,7 +83,7 @@ async function getChannelsFromProvider(provider, isFromAPI) {
         name: channel.name,
         logo: channel.stream_icon || null,
         category_name: categoryMap.get(channel.category_id) || 'Uncategorized',
-        provider: { ...provider, hostname: new url.URL(provider.server).hostname, isFromAPI }
+        provider: { ...provider, isFromAPI: false } // Vše je teď manuální
     }));
 }
 
@@ -89,7 +95,6 @@ function processAndMergeChannels(channels) {
         
         const source = {
             id: channel.id,
-            url: `${channel.provider.server}/live/${channel.provider.username}/${channel.provider.password}/${channel.id}.ts`,
             provider: channel.provider
         };
         
@@ -127,8 +132,10 @@ function parseXtreamUrl(inputUrl) {
     const parsed = new url.URL(inputUrl);
     const username = parsed.searchParams.get('username');
     const password = parsed.searchParams.get('password');
-    if (!username || !password) throw new Error("Missing username or password.");
-    return { server: `${parsed.protocol}//${parsed.host}`, username, password };
+    if (!username || !password) throw new Error("Chybí uživatelské jméno nebo heslo.");
+    
+    const hostname = parsed.hostname;
+    return { server: `${parsed.protocol}//${parsed.host}`, username, password, hostname };
 }
 
 function normalizeName(name) {
